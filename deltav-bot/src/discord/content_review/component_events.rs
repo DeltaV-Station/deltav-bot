@@ -25,6 +25,8 @@ use crate::{
     github::GitHub,
 };
 
+const ERROR_RESPONSE_TEXT: &'static str = "An internal error occurred.";
+
 #[derive(Debug, Modal)]
 #[name = "Start a review"] // Struct name by default
 struct StartReviewModal {
@@ -63,18 +65,38 @@ pub async fn start_review_task(
     db: Pool<Sqlite>,
     gh: Arc<GitHub>,
     intake_thread: ChannelId,
-    forum_channel: ChannelId,
     private: bool,
 ) {
-    let error_response = EditInteractionResponse::new().content("An internal error occurred.");
+    let error_response = EditInteractionResponse::new().content(ERROR_RESPONSE_TEXT);
+
+    let forum_channel = match if private {
+        Config::get_private_forum(&db).await
+    } else {
+        Config::get_public_forum(&db).await
+    } {
+        Some(x) => x,
+        None => {
+            error!(
+                "Can't process start review press with respective forum unset (private: {private})."
+            );
+            let _ = interaction.create_response(
+                &ctx,
+                CreateInteractionResponse::Message(
+                    CreateInteractionResponseMessage::new()
+                        .content("Can't process start with respective forum unset."),
+                ),
+            );
+            return;
+        }
+    };
 
     let Some(under_review_label) = Config::get_under_review_label(&db).await else {
-        error!("Can't process public review press without under review github label.");
+        error!("Can't process start review press without under review github label.");
         let _ = interaction.create_response(
             &ctx,
             CreateInteractionResponse::Message(
                 CreateInteractionResponseMessage::new()
-                    .content("Can't process public start with under review label unset."),
+                    .content("Can't process review start with under review label unset."),
             ),
         );
         return;
@@ -216,6 +238,78 @@ pub async fn start_review_task(
     }
 }
 
+pub async fn no_review_needed_task(
+    interaction: ComponentInteraction,
+    ctx: poise::serenity_prelude::Context,
+    discussion: DiscussionRecord,
+    db: Pool<Sqlite>,
+    gh: Arc<GitHub>,
+    intake_thread: ChannelId,
+) {
+    let error_response = EditInteractionResponse::new().content(ERROR_RESPONSE_TEXT);
+
+    let _ = interaction
+        .create_response(&ctx, CreateInteractionResponse::Acknowledge)
+        .await;
+    let Some(no_review_needed_label) = Config::get_no_review_needed_label(&db).await else {
+        error!("Can't process no review press without label.");
+        let _ = interaction
+            .edit_response(
+                &ctx,
+                EditInteractionResponse::new()
+                    .content("Can't process No Review Needed with GitHub label unset."),
+            )
+            .await;
+        return;
+    };
+
+    if let Err(()) = discussion.delete(&db).await {
+        error!(
+            "Failed to delete discussion from DB. Can't process no review needed press further."
+        );
+        return;
+    }
+
+    if let Err(e) = gh
+        .octo_install
+        .issues(&gh.repo_owner, &gh.repo_name)
+        .add_labels(discussion.pr_id, &vec![no_review_needed_label])
+        .await
+    {
+        error!(
+            "Failed to set no review needed label on PR #{}: {e:#?}",
+            discussion.pr_id
+        );
+    }
+
+    if let Err(e) = gh
+        .octo_install
+        .issues(&gh.repo_owner, &gh.repo_name)
+        .create_comment(
+            discussion.pr_id,
+            format!(
+                "**Triaged by {}:** This PR does not require a content review discussion.",
+                interaction.user.name
+            ),
+        )
+        .await
+    {
+        error!(
+            "Failed to create no review needed comment on PR #{}: {e:#?}",
+            discussion.pr_id
+        );
+    }
+
+    if let Err(e) = intake_thread.delete(&ctx).await {
+        error!(
+            "Failed to delete intake discussion for pr {}: {e:#?}",
+            discussion.pr_id
+        );
+        let _ = interaction.edit_response(&ctx, error_response).await;
+        return;
+    }
+}
+
 // TODO: This should do as little work as possible to verify permissions and basic validity before
 //       spawning a task to handle the interaction so other interactions aren't held up
 pub async fn cr_component_task(
@@ -271,10 +365,21 @@ pub async fn cr_component_task(
                         "Failed to get parent forum for discussion thread {}",
                         discussion.thread_id
                     );
+                    let _ = interaction.edit_response(&ctx, error_response).await;
+
                     continue;
                 };
 
                 let Some(intake_forum) = Config::get_intake_forum(&db).await else {
+                    error!("Can't process interaction without intake forum.");
+                    let _ = interaction
+                        .edit_response(
+                            &ctx,
+                            EditInteractionResponse::new()
+                                .content("Can't process CR interaction with intake forum unset."),
+                        )
+                        .await;
+
                     continue;
                 };
 
@@ -291,19 +396,6 @@ pub async fn cr_component_task(
 
                 match id_parts[1] {
                     BUTTON_ID_ACTION_START_PUBLIC => {
-                        let Some(public_forum) = Config::get_public_forum(&db).await else {
-                            error!("Can't process public review press without public forum.");
-                            let _ = interaction.create_response(
-                                &ctx,
-                                CreateInteractionResponse::Message(
-                                    CreateInteractionResponseMessage::new().content(
-                                        "Can't process public start with public forum unset.",
-                                    ),
-                                ),
-                            );
-                            continue;
-                        };
-
                         tokio::spawn(start_review_task(
                             interaction,
                             ctx.clone(),
@@ -311,25 +403,11 @@ pub async fn cr_component_task(
                             db.clone(),
                             gh.clone(),
                             intake_thread,
-                            public_forum,
                             false,
                         ));
                     }
 
                     BUTTON_ID_ACTION_START_PRIVATE => {
-                        let Some(private_forum) = Config::get_private_forum(&db).await else {
-                            error!("Can't process private review press without private forum.");
-                            let _ = interaction.create_response(
-                                &ctx,
-                                CreateInteractionResponse::Message(
-                                    CreateInteractionResponseMessage::new().content(
-                                        "Can't process private start with private forum unset.",
-                                    ),
-                                ),
-                            );
-                            continue;
-                        };
-
                         tokio::spawn(start_review_task(
                             interaction,
                             ctx.clone(),
@@ -337,67 +415,21 @@ pub async fn cr_component_task(
                             db.clone(),
                             gh.clone(),
                             intake_thread,
-                            private_forum,
                             true,
                         ));
                     }
 
                     BUTTON_ID_ACTION_NOT_NEEDED => {
-                        let _ = interaction
-                            .create_response(&ctx, CreateInteractionResponse::Acknowledge)
-                            .await;
-                        let Some(no_review_needed_label) =
-                            Config::get_no_review_needed_label(&db).await
-                        else {
-                            error!("Can't process no review press without label.");
-                            let _ = interaction
-                                .edit_response(
-                                    &ctx,
-                                    EditInteractionResponse::new().content(
-                                        "Can't process No Review Needed with GitHub label unset.",
-                                    ),
-                                )
-                                .await;
-                            continue;
-                        };
-
-                        if let Err(()) = discussion.delete(&db).await {
-                            error!(
-                                "Failed to delete discussion from DB. Can't process no review needed press further."
-                            );
-                            continue;
-                        }
-
-                        if let Err(e) = gh
-                            .octo_install
-                            .issues(&gh.repo_owner, &gh.repo_name)
-                            .add_labels(discussion.pr_id, &vec![no_review_needed_label])
-                            .await
-                        {
-                            error!(
-                                "Failed to set no review needed label on PR #{}: {e:#?}",
-                                discussion.pr_id
-                            );
-                        }
-
-                        if let Err(e) = gh
-                            .octo_install
-                            .issues(&gh.repo_owner, &gh.repo_name)
-                            .create_comment(discussion.pr_id, format!("**Triaged by {}:** This PR does not require a content review discussion.", interaction.user.name))
-                            .await
-                        {
-                            error!(
-                                "Failed to create no review needed comment on PR #{}: {e:#?}",
-                                discussion.pr_id
-                            );
-                        }
-
-                        if let Err(e) = intake_thread.delete(&ctx).await {
-                            error!("Failed to delete intake discussion for pr {pr_id}: {e:#?}");
-                            let _ = interaction.edit_response(&ctx, error_response).await;
-                            continue;
-                        }
+                        tokio::spawn(no_review_needed_task(
+                            interaction,
+                            ctx.clone(),
+                            discussion,
+                            db.clone(),
+                            gh.clone(),
+                            intake_thread,
+                        ));
                     }
+
                     action => {
                         error!("Received button press with invalid action {}", action);
                         let _ = interaction.edit_response(&ctx, error_response).await;
