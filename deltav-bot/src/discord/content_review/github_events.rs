@@ -222,7 +222,7 @@ pub async fn cr_github_task(
                             guild_channel
                                 .applied_tags
                                 .iter()
-                                .chain(vec![forum.tag_pr_closed].iter())
+                                .chain([forum.tag_pr_closed].iter())
                                 .cloned(),
                         ),
                     )
@@ -274,7 +274,7 @@ pub async fn cr_github_task(
                             guild_channel
                                 .applied_tags
                                 .iter()
-                                .chain(vec![forum.tag_pr_merged].iter())
+                                .chain([forum.tag_pr_merged].iter())
                                 .cloned(),
                         ),
                     )
