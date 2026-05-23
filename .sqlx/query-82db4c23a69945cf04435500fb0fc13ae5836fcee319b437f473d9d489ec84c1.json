@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT flags FROM permissions WHERE snowflake = ?1",
+  "describe": {
+    "columns": [
+      {
+        "name": "flags",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "82db4c23a69945cf04435500fb0fc13ae5836fcee319b437f473d9d489ec84c1"
+}

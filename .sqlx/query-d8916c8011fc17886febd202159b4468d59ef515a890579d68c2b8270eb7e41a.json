@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO permissions(snowflake, flags) VALUES(?1, ?2) ON CONFLICT(snowflake) DO UPDATE SET flags=excluded.flags",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "d8916c8011fc17886febd202159b4468d59ef515a890579d68c2b8270eb7e41a"
+}

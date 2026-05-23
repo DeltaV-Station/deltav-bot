@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM permissions WHERE snowflake = ?1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "8b7ab3cb7ac647dcb2ed972cdbe340bcd2fad3de8c340627f95898b705d4c5da"
+}
