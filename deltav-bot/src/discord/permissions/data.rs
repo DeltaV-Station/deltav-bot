@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, str::FromStr, sync::Arc};
 
 use bitflags::bitflags;
 use sqlx::{Pool, Sqlite, query};
@@ -17,7 +17,7 @@ bitflags! {
     }
 }
 
-type Snowflake = u64;
+pub type Snowflake = u64;
 
 #[derive(Clone)]
 pub struct Permissions {
@@ -29,7 +29,7 @@ impl Permissions {
     pub fn new(db: Pool<Sqlite>) -> Self {
         Self {
             db,
-            cache: Arc::new(RwLock::new(HashMap::new())),
+            cache: Arc::new(RwLock::new(HashMap::new())), // TODO: cache eviction
         }
     }
 
@@ -48,7 +48,8 @@ impl Permissions {
                 .await
             {
                 Ok(_) => {
-                    self.cache.write().await.remove(&id);
+                    self.cache.write().await.insert(id, flags);
+
                     return Ok(());
                 }
                 Err(e) => {
@@ -106,7 +107,13 @@ impl Permissions {
 
                 Ok(flags)
             }
-            Ok(None) => Ok(PermissionFlags::empty()),
+            Ok(None) => {
+                self.cache
+                    .write()
+                    .await
+                    .insert(id, PermissionFlags::empty());
+                Ok(PermissionFlags::empty())
+            }
             Err(e) => {
                 error!("Unable to fetch permissions for {id}: {e}");
 
