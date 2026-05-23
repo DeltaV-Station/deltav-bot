@@ -9,19 +9,25 @@ use tokio::{
 use tracing::{error, info};
 
 use crate::{
-    discord::content_review::{
-        component_events::cr_component_task, cr, github_events::cr_github_task,
+    discord::{
+        content_review::{component_events::cr_component_task, cr, github_events::cr_github_task},
+        permissions::{
+            data::{PermissionFlags, Permissions},
+            perms,
+        },
     },
     github::{GitHub, GitHubMessage},
 };
 
 mod content_review;
+mod permissions;
 
 const EMBED_DESC_MAX_LEN: usize = 4096;
 
 struct Data {
     gh: Arc<GitHub>,
     db: Pool<Sqlite>,
+    permissions: Permissions,
     // TODO: need to use the receiver in the event handler, which receives a read-only ref. there's probably a more sane way to do this, but it works for now.
     gh_receiver: Arc<Mutex<Receiver<GitHubMessage>>>,
 }
@@ -34,10 +40,24 @@ pub async fn initialize(
     db: Pool<Sqlite>,
     receiver: Receiver<GitHubMessage>,
 ) -> Result<JoinHandle<()>, ()> {
+    let permissions = Permissions::new(db.clone());
+    if let Ok(operator_id) = std::env::var("DISCORD_OPERATOR_USERID") {
+        if let Ok(operator_id) = operator_id.parse::<u64>() {
+            info!(
+                "Operator is specified in DISCORD_OPERATOR_USERID, granting all flags to {operator_id}."
+            );
+            permissions
+                .set_flags(operator_id, PermissionFlags::all())
+                .await?;
+        } else {
+            error!("Failed to parse DISCORD_OPERATOR_USERID, must be u64.")
+        }
+    }
+
     info!("Initializing framework.");
     let framework = poise::Framework::builder()
         .options(poise::FrameworkOptions {
-            commands: vec![cr()],
+            commands: vec![cr(), perms()],
             event_handler: |ctx, event, framework, data| {
                 Box::pin(event_handler(ctx, event, framework, data))
             },
@@ -48,6 +68,7 @@ pub async fn initialize(
                 poise::builtins::register_globally(ctx, &framework.options().commands).await?;
                 Ok(Data {
                     gh: Arc::new(github),
+                    permissions: Permissions::new(db.clone()),
                     db,
                     gh_receiver: Arc::new(Mutex::new(receiver)),
                 })
