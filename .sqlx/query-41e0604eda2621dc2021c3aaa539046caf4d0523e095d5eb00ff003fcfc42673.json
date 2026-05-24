@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            SELECT gh_label_cr_approved\n            FROM cr_config\n            WHERE ID = 1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "name": "gh_label_cr_approved",
+        "ordinal": 0,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "41e0604eda2621dc2021c3aaa539046caf4d0523e095d5eb00ff003fcfc42673"
+}
