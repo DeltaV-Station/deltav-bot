@@ -3,13 +3,13 @@ use std::collections::HashMap;
 use bitflags::Flags;
 use poise::{
     ChoiceParameter, CommandParameterChoice,
-    serenity_prelude::{RoleId, UserId},
+    serenity_prelude::{ComponentInteraction, CreateInteractionResponseMessage, RoleId, UserId},
 };
-use tracing::info;
+use tracing::{error, info, warn};
 
 use crate::discord::{
     Context, Error,
-    permissions::data::{PermissionFlags, Snowflake},
+    permissions::data::{PermissionFlags, Permissions, Snowflake},
 };
 
 pub mod data;
@@ -60,7 +60,7 @@ pub async fn perms_get(
     user: Option<UserId>,
     role: Option<RoleId>,
 ) -> Result<(), Error> {
-    if !check_permissions(&ctx, PermissionFlags::PERMISSIONS_VIEW).await? {
+    if !check_permissions_command(&ctx, PermissionFlags::PERMISSIONS_VIEW).await? {
         return Ok(());
     }
 
@@ -95,7 +95,7 @@ pub async fn perms_add(
     role: Option<RoleId>,
     permission: PermissionFlags,
 ) -> Result<(), Error> {
-    if !check_permissions(&ctx, PermissionFlags::PERMISSIONS_EDIT).await? {
+    if !check_permissions_command(&ctx, PermissionFlags::PERMISSIONS_EDIT).await? {
         return Ok(());
     }
 
@@ -134,7 +134,7 @@ pub async fn perms_remove(
     role: Option<RoleId>,
     permission: PermissionFlags,
 ) -> Result<(), Error> {
-    if !check_permissions(&ctx, PermissionFlags::PERMISSIONS_EDIT).await? {
+    if !check_permissions_command(&ctx, PermissionFlags::PERMISSIONS_EDIT).await? {
         return Ok(());
     }
 
@@ -169,7 +169,7 @@ pub async fn perms_remove(
 
 #[poise::command(slash_command, rename = "breakdown", ephemeral)]
 pub async fn perms_breakdown(ctx: Context<'_>, user: UserId) -> Result<(), Error> {
-    if !check_permissions(&ctx, PermissionFlags::PERMISSIONS_VIEW).await? {
+    if !check_permissions_command(&ctx, PermissionFlags::PERMISSIONS_VIEW).await? {
         return Ok(());
     }
 
@@ -250,7 +250,10 @@ async fn check_id_args(
     Ok(Some(snowflake))
 }
 
-pub async fn check_permissions(ctx: &Context<'_>, flags: PermissionFlags) -> Result<bool, Error> {
+pub async fn check_permissions_command(
+    ctx: &Context<'_>,
+    flags: PermissionFlags,
+) -> Result<bool, Error> {
     if ctx
         .data()
         .permissions
@@ -270,5 +273,61 @@ pub async fn check_permissions(ctx: &Context<'_>, flags: PermissionFlags) -> Res
 
     ctx.reply("You are not authorized to use this feature.")
         .await?;
+    Ok(false)
+}
+
+pub async fn check_permissions_component(
+    ctx: &poise::serenity_prelude::Context,
+    interaction: &ComponentInteraction,
+    permissions: &Permissions,
+    flags: PermissionFlags,
+) -> Result<bool, Error> {
+    if permissions
+        .has_flags(interaction.user.id.get(), flags)
+        .await
+    {
+        return Ok(true);
+    }
+
+    let Some(guild) = interaction.guild_id else {
+        error!("Interaction without guild_id: {interaction:?}. Returning unauthorized.");
+        return Ok(false);
+    };
+
+    let member = match guild.member(&ctx, interaction.user.id).await {
+        Ok(member) => member,
+        Err(e) => {
+            error!("Couldn't get guild member for interaction: {interaction:?}. Error: {e}");
+            interaction
+                .create_response(
+                    &ctx,
+                    poise::serenity_prelude::CreateInteractionResponse::Message(
+                        CreateInteractionResponseMessage::new()
+                            .ephemeral(true)
+                            .content("An internal error occurred."),
+                    ),
+                )
+                .await?;
+            return Err(Box::new(e));
+        }
+    };
+
+    for role in &member.roles {
+        if permissions.has_flags(role.get(), flags).await {
+            return Ok(true);
+        }
+    }
+
+    interaction
+        .create_response(
+            &ctx,
+            poise::serenity_prelude::CreateInteractionResponse::Message(
+                CreateInteractionResponseMessage::new()
+                    .ephemeral(true)
+                    .content("You are not authorized to use this feature."),
+            ),
+        )
+        .await?;
+
     Ok(false)
 }

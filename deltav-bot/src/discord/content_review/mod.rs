@@ -15,7 +15,7 @@ use crate::{
             discussions::DiscussionRecord,
             forums::{ForumRecord, delete_forum_by_channel},
         },
-        permissions::{check_permissions, data::PermissionFlags},
+        permissions::{check_permissions_command, data::PermissionFlags},
     },
     github::GitHub,
 };
@@ -82,7 +82,7 @@ pub async fn cr_complete(
     outcome: CrOutcome,
     comment: Option<String>,
 ) -> Result<(), Error> {
-    if !check_permissions(&ctx, PermissionFlags::CONTENT_REVIEWER).await? {
+    if !check_permissions_command(&ctx, PermissionFlags::CONTENT_REVIEWER).await? {
         return Ok(());
     }
 
@@ -273,7 +273,7 @@ pub async fn cr_config(
     gh_label_under_review: Option<String>,
     review_ping_role: Option<RoleId>,
 ) -> Result<(), Error> {
-    if !check_permissions(&ctx, PermissionFlags::CONTENT_REVIEW_CONFIG).await? {
+    if !check_permissions_command(&ctx, PermissionFlags::CONTENT_REVIEW_CONFIG).await? {
         return Ok(());
     }
 
@@ -354,7 +354,7 @@ pub async fn cr_forum_upsert(
     tag_closed: ForumTagId,
     tag_merged: ForumTagId,
 ) -> Result<(), Error> {
-    if !check_permissions(&ctx, PermissionFlags::CONTENT_REVIEW_CONFIG).await? {
+    if !check_permissions_command(&ctx, PermissionFlags::CONTENT_REVIEW_CONFIG).await? {
         return Ok(());
     }
 
@@ -383,7 +383,7 @@ pub async fn cr_forum_upsert(
 // Delete a direction forum record (this does not delete the actual channel)
 #[poise::command(slash_command, rename = "delete", ephemeral)]
 pub async fn cr_forum_delete(ctx: Context<'_>, forum: ChannelId) -> Result<(), Error> {
-    if !check_permissions(&ctx, PermissionFlags::CONTENT_REVIEW_CONFIG).await? {
+    if !check_permissions_command(&ctx, PermissionFlags::CONTENT_REVIEW_CONFIG).await? {
         return Ok(());
     }
 

@@ -122,6 +122,7 @@ async fn event_handler(
                 ctx.clone(),
                 data.db.clone(),
                 data.gh.clone(),
+                data.permissions.clone(),
             ));
         }
         _ => {}

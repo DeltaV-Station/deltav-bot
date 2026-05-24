@@ -14,11 +14,17 @@ use sqlx::{Pool, Sqlite};
 use tracing::error;
 
 use crate::{
-    discord::content_review::{
-        BUTTON_ID_ACTION_NOT_NEEDED, BUTTON_ID_ACTION_START_PRIVATE, BUTTON_ID_ACTION_START_PUBLIC,
-        HandledError, INTERACTION_ID_PREFIX, create_pr_embed,
-        data::{config::Config, discussions::DiscussionRecord},
-        discussion_channel_to_guild,
+    discord::{
+        content_review::{
+            BUTTON_ID_ACTION_NOT_NEEDED, BUTTON_ID_ACTION_START_PRIVATE,
+            BUTTON_ID_ACTION_START_PUBLIC, HandledError, INTERACTION_ID_PREFIX, create_pr_embed,
+            data::{config::Config, discussions::DiscussionRecord},
+            discussion_channel_to_guild,
+        },
+        permissions::{
+            check_permissions_component,
+            data::{PermissionFlags, Permissions},
+        },
     },
     github::GitHub,
 };
@@ -338,6 +344,7 @@ pub async fn cr_component_task(
     ctx: poise::serenity_prelude::Context,
     db: Pool<Sqlite>,
     gh: Arc<GitHub>,
+    permissions: Permissions,
 ) {
     while let Some(interaction) = ComponentInteractionCollector::new(&ctx)
         .filter(move |i| {
@@ -378,6 +385,17 @@ pub async fn cr_component_task(
 
                     continue;
                 };
+
+                let check = check_permissions_component(
+                    &ctx,
+                    &interaction,
+                    &permissions,
+                    PermissionFlags::CONTENT_REVIEWER,
+                )
+                .await;
+                if check.is_err() || !check.unwrap() {
+                    continue;
+                }
 
                 let Some(parent_forum) =
                     discussion_channel_to_guild(pr_id, discussion.thread_id, &ctx)
