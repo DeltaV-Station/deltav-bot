@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE cr_discussions\n                SET review_days_next_micros=NULL\n                WHERE pr_id = ?1\n                ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "110dbd2c43b8d25f112dafb6fcb6629ec4e2d4598a28de112271e57d17a4f750"
+}

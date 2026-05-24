@@ -12,7 +12,7 @@ use crate::{
     discord::{
         content_review::{
             component_events::cr_component_task, cr, data::config::CrConfig,
-            github_events::cr_github_task,
+            github_events::cr_github_task, timers::cr_timers_task,
         },
         permissions::{
             data::{PermissionFlags, Permissions},
@@ -129,6 +129,12 @@ async fn event_handler(
                 data.db.clone(),
                 data.gh.clone(),
                 data.permissions.clone(),
+                data.cr_config.clone(),
+            ));
+
+            tokio::spawn(cr_timers_task(
+                ctx.clone(),
+                data.db.clone(),
                 data.cr_config.clone(),
             ));
         }

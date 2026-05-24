@@ -22,11 +22,13 @@ use crate::{
 pub mod component_events;
 pub mod data;
 pub mod github_events;
+pub mod timers;
 
 pub const INTERACTION_ID_PREFIX: &'static str = "cr";
 pub const BUTTON_ID_ACTION_START_PUBLIC: &'static str = "reviewStartPublic";
 pub const BUTTON_ID_ACTION_START_PRIVATE: &'static str = "reviewStartPrivate";
 pub const BUTTON_ID_ACTION_NOT_NEEDED: &'static str = "reviewNotNeeded";
+pub const BUTTON_ID_ACTION_MUTE_REMINDERS: &'static str = "reviewRemindersStop";
 
 /// Error returned by underlying systems, denoting how the error should be presented to the user.
 /// If a function returns this type of Error, it must properly log all errors using `tracing::error`.
@@ -100,7 +102,8 @@ pub async fn cr_complete(
         return Ok(());
     };
 
-    let Some(discussion) = DiscussionRecord::get_by_thread(&ctx.data().db, ctx.channel_id()).await
+    let Some(mut discussion) =
+        DiscussionRecord::get_by_thread(&ctx.data().db, ctx.channel_id()).await
     else {
         ctx.reply("There is no PR associated with this thread.")
             .await?;
@@ -177,6 +180,11 @@ pub async fn cr_complete(
                 // Not returning here since closing is really not essential, it's already marked
             }
         }
+    }
+
+    if let Err(e) = discussion.disable_reminders(&ctx.data().db).await {
+        ctx.reply(format!("Failed to disable reminders during closing: {e}"))
+            .await?;
     }
 
     if let Err(e) = gh

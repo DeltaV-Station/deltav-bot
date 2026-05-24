@@ -4,10 +4,9 @@ use chrono::{Days, Utc};
 use poise::{
     Modal, execute_modal_on_component_interaction,
     serenity_prelude::{
-        ChannelId, ComponentInteraction, ComponentInteractionCollector,
-        ComponentInteractionDataKind, CreateAllowedMentions, CreateForumPost,
-        CreateInteractionResponse, CreateInteractionResponseMessage, CreateMessage,
-        EditInteractionResponse,
+        ComponentInteraction, ComponentInteractionCollector, ComponentInteractionDataKind,
+        CreateAllowedMentions, CreateForumPost, CreateInteractionResponse,
+        CreateInteractionResponseMessage, CreateMessage, EditInteractionResponse,
     },
 };
 use sqlx::{Pool, Sqlite};
@@ -16,9 +15,10 @@ use tracing::error;
 use crate::{
     discord::{
         content_review::{
-            BUTTON_ID_ACTION_NOT_NEEDED, BUTTON_ID_ACTION_START_PRIVATE,
-            BUTTON_ID_ACTION_START_PUBLIC, HandledError, INTERACTION_ID_PREFIX, create_pr_embed,
-            data::{config::CrConfig, discussions::DiscussionRecord},
+            BUTTON_ID_ACTION_MUTE_REMINDERS, BUTTON_ID_ACTION_NOT_NEEDED,
+            BUTTON_ID_ACTION_START_PRIVATE, BUTTON_ID_ACTION_START_PUBLIC, HandledError,
+            INTERACTION_ID_PREFIX, create_pr_embed,
+            data::{config::CrConfig, discussions::DiscussionRecord, forums::ForumRecord},
             discussion_channel_to_guild,
         },
         permissions::{
@@ -67,7 +67,6 @@ pub async fn start_review_task(
     db: Pool<Sqlite>,
     config: CrConfig,
     gh: Arc<GitHub>,
-    intake_thread: ChannelId,
     private: bool,
 ) {
     async fn inner(
@@ -77,7 +76,6 @@ pub async fn start_review_task(
         db: Pool<Sqlite>,
         config: CrConfig,
         gh: Arc<GitHub>,
-        intake_thread: ChannelId,
         private: bool,
     ) -> Result<(), HandledError> {
         let forum_channel = if private {
@@ -213,6 +211,7 @@ pub async fn start_review_task(
                 HandledError::UserfacingError("Failed to create forum post.".into())
             })?;
 
+        let intake_thread = discussion.thread_id;
         discussion.set_thread_id(&db, new_thread.id).await?;
 
         discussion.setup_review_time(&db, review_time_days).await?;
@@ -228,18 +227,7 @@ pub async fn start_review_task(
         Ok(())
     }
 
-    match inner(
-        &interaction,
-        &ctx,
-        discussion,
-        db,
-        config,
-        gh,
-        intake_thread,
-        private,
-    )
-    .await
-    {
+    match inner(&interaction, &ctx, discussion, db, config, gh, private).await {
         Err(e) => {
             let _ = interaction
                 .create_response(
@@ -261,7 +249,6 @@ pub async fn no_review_needed_task(
     db: Pool<Sqlite>,
     config: CrConfig,
     gh: Arc<GitHub>,
-    intake_thread: ChannelId,
 ) {
     async fn inner(
         interaction: &ComponentInteraction,
@@ -270,7 +257,6 @@ pub async fn no_review_needed_task(
         db: Pool<Sqlite>,
         config: CrConfig,
         gh: Arc<GitHub>,
-        intake_thread: ChannelId,
     ) -> Result<(), HandledError> {
         let no_review_needed_label =
             config
@@ -312,7 +298,7 @@ pub async fn no_review_needed_task(
                 HandledError::UserfacingError("Failed to create GitHub comment.".into())
             })?;
 
-        intake_thread.delete(&ctx).await.map_err(|e| {
+        discussion.thread_id.delete(&ctx).await.map_err(|e| {
             error!(
                 "Failed to delete intake discussion for PR #{}: {e}",
                 discussion.pr_id
@@ -323,17 +309,7 @@ pub async fn no_review_needed_task(
         Ok(())
     }
 
-    match inner(
-        &interaction,
-        &ctx,
-        discussion,
-        db,
-        config,
-        gh,
-        intake_thread,
-    )
-    .await
-    {
+    match inner(&interaction, &ctx, discussion, db, config, gh).await {
         Err(e) => {
             let _ = interaction
                 .create_response(
@@ -435,19 +411,17 @@ pub async fn cr_component_task(
                     continue;
                 };
 
-                if parent_forum != intake_forum {
-                    error!(
-                        "Received button press {id_parts:?}, but parent forum was not intake forum."
-                    );
-                    let _ = interaction.create_response(&ctx, error_response).await;
-
-                    continue;
-                }
-
-                let intake_thread = discussion.thread_id;
-
                 match id_parts[1] {
                     BUTTON_ID_ACTION_START_PUBLIC => {
+                        if parent_forum != intake_forum {
+                            error!(
+                                "Received button press {id_parts:?}, but parent forum was not intake forum."
+                            );
+                            let _ = interaction.create_response(&ctx, error_response).await;
+
+                            continue;
+                        }
+
                         tokio::spawn(start_review_task(
                             interaction,
                             ctx.clone(),
@@ -455,12 +429,20 @@ pub async fn cr_component_task(
                             db.clone(),
                             config.clone(),
                             gh.clone(),
-                            intake_thread,
                             false,
                         ));
                     }
 
                     BUTTON_ID_ACTION_START_PRIVATE => {
+                        if parent_forum != intake_forum {
+                            error!(
+                                "Received button press {id_parts:?}, but parent forum was not intake forum."
+                            );
+                            let _ = interaction.create_response(&ctx, error_response).await;
+
+                            continue;
+                        }
+
                         tokio::spawn(start_review_task(
                             interaction,
                             ctx.clone(),
@@ -468,12 +450,20 @@ pub async fn cr_component_task(
                             db.clone(),
                             config.clone(),
                             gh.clone(),
-                            intake_thread,
                             true,
                         ));
                     }
 
                     BUTTON_ID_ACTION_NOT_NEEDED => {
+                        if parent_forum != intake_forum {
+                            error!(
+                                "Received button press {id_parts:?}, but parent forum was not intake forum."
+                            );
+                            let _ = interaction.create_response(&ctx, error_response).await;
+
+                            continue;
+                        }
+
                         tokio::spawn(no_review_needed_task(
                             interaction,
                             ctx.clone(),
@@ -481,7 +471,23 @@ pub async fn cr_component_task(
                             db.clone(),
                             config.clone(),
                             gh.clone(),
-                            intake_thread,
+                        ));
+                    }
+
+                    BUTTON_ID_ACTION_MUTE_REMINDERS => {
+                        if let None = ForumRecord::get_by_channel(&db, parent_forum).await {
+                            error!(
+                                "Received button press {id_parts:?}, but parent forum was not registered."
+                            );
+                            let _ = interaction.create_response(&ctx, error_response).await;
+                            continue;
+                        }
+
+                        tokio::spawn(mute_reminders_task(
+                            interaction,
+                            ctx.clone(),
+                            discussion,
+                            db.clone(),
                         ));
                     }
 
@@ -493,6 +499,43 @@ pub async fn cr_component_task(
                 }
             }
             _ => {}
+        }
+    }
+}
+
+async fn mute_reminders_task(
+    interaction: ComponentInteraction,
+    ctx: poise::serenity_prelude::Context,
+    mut discussion: DiscussionRecord,
+    db: Pool<Sqlite>,
+) {
+    match discussion.disable_reminders(&db).await {
+        Ok(()) => {
+            let _ = interaction
+                .create_response(
+                    &ctx,
+                    CreateInteractionResponse::Message(
+                        CreateInteractionResponseMessage::new().content(format!(
+                            "Successfully disabled reminders for PR #{}.",
+                            discussion.pr_id
+                        )),
+                    ),
+                )
+                .await;
+        }
+        Err(e) => {
+            let _ = interaction.defer_ephemeral(&ctx).await;
+            let _ = interaction
+                .create_response(
+                    &ctx,
+                    CreateInteractionResponse::Message(
+                        CreateInteractionResponseMessage::new().content(format!(
+                            "Failed to disable reminders for PR #{}: {e}",
+                            discussion.pr_id
+                        )),
+                    ),
+                )
+                .await;
         }
     }
 }

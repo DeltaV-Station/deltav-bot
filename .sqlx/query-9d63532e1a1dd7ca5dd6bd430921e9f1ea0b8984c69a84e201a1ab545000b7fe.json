@@ -1,0 +1,68 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT * FROM cr_discussions",
+  "describe": {
+    "columns": [
+      {
+        "name": "pr_id",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "forum_id",
+        "ordinal": 1,
+        "type_info": "Integer"
+      },
+      {
+        "name": "thread_id",
+        "ordinal": 2,
+        "type_info": "Integer"
+      },
+      {
+        "name": "review_days_total",
+        "ordinal": 3,
+        "type_info": "Integer"
+      },
+      {
+        "name": "review_days_passed",
+        "ordinal": 4,
+        "type_info": "Integer"
+      },
+      {
+        "name": "review_days_next_micros",
+        "ordinal": 5,
+        "type_info": "Integer"
+      },
+      {
+        "name": "pr_title",
+        "ordinal": 6,
+        "type_info": "Text"
+      },
+      {
+        "name": "pr_author",
+        "ordinal": 7,
+        "type_info": "Text"
+      },
+      {
+        "name": "pr_body",
+        "ordinal": 8,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "9d63532e1a1dd7ca5dd6bd430921e9f1ea0b8984c69a84e201a1ab545000b7fe"
+}
