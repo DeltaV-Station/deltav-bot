@@ -48,7 +48,8 @@ pub async fn initialize(
             );
             permissions
                 .set_flags(operator_id, PermissionFlags::all())
-                .await?;
+                .await
+                .map_err(|_| ())?;
         } else {
             error!("Failed to parse DISCORD_OPERATOR_USERID, must be u64.")
         }

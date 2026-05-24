@@ -1,4 +1,4 @@
-use std::{collections::HashMap, str::FromStr, sync::Arc};
+use std::{collections::HashMap, sync::Arc};
 
 use bitflags::bitflags;
 use sqlx::{Pool, Sqlite, query};
@@ -6,6 +6,8 @@ use tokio::sync::RwLock;
 use tracing::{error, info};
 
 use sqlx::Error as SqlxError;
+
+use crate::discord::content_review::HandledError;
 
 bitflags! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -36,11 +38,15 @@ impl Permissions {
     pub async fn has_flags(&self, id: Snowflake, expected_flags: PermissionFlags) -> bool {
         match self.get_flags(id).await {
             Ok(actual_flags) => actual_flags.contains(expected_flags),
-            Err(()) => false,
+            Err(_) => false,
         }
     }
 
-    pub async fn set_flags(&self, id: Snowflake, flags: PermissionFlags) -> Result<(), ()> {
+    pub async fn set_flags(
+        &self,
+        id: Snowflake,
+        flags: PermissionFlags,
+    ) -> Result<(), HandledError> {
         let id_s = id.cast_signed();
         if flags.is_empty() {
             match query!("DELETE FROM permissions WHERE snowflake = ?1", id_s)
@@ -58,7 +64,7 @@ impl Permissions {
                     }
 
                     error!("Failed to delete permissions row for {id}: {e}");
-                    return Err(());
+                    return Err(HandledError::InternalError);
                 }
             }
         }
@@ -82,12 +88,12 @@ impl Permissions {
                     flags.bits()
                 );
 
-                Err(())
+                Err(HandledError::InternalError)
             }
         }
     }
 
-    pub async fn get_flags(&self, id: Snowflake) -> Result<PermissionFlags, ()> {
+    pub async fn get_flags(&self, id: Snowflake) -> Result<PermissionFlags, HandledError> {
         if let Some(cached) = self.cache.read().await.get(&id) {
             return Ok(*cached);
         }
@@ -100,7 +106,7 @@ impl Permissions {
             Ok(Some(x)) => {
                 let Some(flags) = PermissionFlags::from_bits(x.flags.cast_unsigned()) else {
                     error!("Invalid permission flags for {id}: {:b}", x.flags);
-                    return Err(());
+                    return Err(HandledError::InternalError);
                 };
 
                 self.cache.write().await.insert(id, flags);
@@ -117,12 +123,16 @@ impl Permissions {
             Err(e) => {
                 error!("Unable to fetch permissions for {id}: {e}");
 
-                Err(())
+                Err(HandledError::InternalError)
             }
         }
     }
 
-    pub async fn remove_flags(&self, id: Snowflake, flags: PermissionFlags) -> Result<(), ()> {
+    pub async fn remove_flags(
+        &self,
+        id: Snowflake,
+        flags: PermissionFlags,
+    ) -> Result<(), HandledError> {
         info!("Trying to remove flags {flags:b} from {id}.");
 
         let new_flags = self.get_flags(id).await.map(|x| x.difference(flags))?;
@@ -131,7 +141,11 @@ impl Permissions {
         Ok(())
     }
 
-    pub async fn add_flags(&self, id: Snowflake, flags: PermissionFlags) -> Result<(), ()> {
+    pub async fn add_flags(
+        &self,
+        id: Snowflake,
+        flags: PermissionFlags,
+    ) -> Result<(), HandledError> {
         info!("Trying to add flags {flags:b} to {id}.");
 
         let new_flags = self.get_flags(id).await.map(|x| x.union(flags))?;
