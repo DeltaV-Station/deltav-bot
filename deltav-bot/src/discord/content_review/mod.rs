@@ -1,3 +1,4 @@
+use octocrab::{params::pulls, pulls::UpdatePullRequestBuilder};
 use poise::{
     ChoiceParameter,
     serenity_prelude::{
@@ -85,6 +86,21 @@ pub async fn cr_complete(
         return Ok(());
     }
 
+    let Some(mut channel) = ctx.guild_channel().await else {
+        ctx.reply("Must be in a guild channel.").await?;
+        return Ok(());
+    };
+
+    let Some(parent_channel) = channel.parent_id else {
+        ctx.reply("Must be in a forum channel.").await?;
+        return Ok(());
+    };
+
+    let Some(forum) = ForumRecord::get_by_channel(&ctx.data().db, parent_channel).await else {
+        ctx.reply("Must be in a registered CR forum.").await?;
+        return Ok(());
+    };
+
     let Some(discussion) = DiscussionRecord::get_by_thread(&ctx.data().db, ctx.channel_id()).await
     else {
         ctx.reply("There is no PR associated with this thread.")
@@ -107,6 +123,8 @@ pub async fn cr_complete(
                 return Ok(());
             };
 
+            ctx.defer().await?;
+
             if let Err(e) = gh
                 .octo_install
                 .issues(&gh.repo_owner, &gh.repo_name)
@@ -128,6 +146,8 @@ pub async fn cr_complete(
                 return Ok(());
             };
 
+            ctx.defer().await?;
+
             if let Err(e) = gh
                 .octo_install
                 .issues(&gh.repo_owner, &gh.repo_name)
@@ -142,6 +162,20 @@ pub async fn cr_complete(
                 ctx.reply("Failed to add CR Denied GitHub label.").await?;
                 return Ok(());
             };
+
+            if let Err(e) = gh
+                .octo_install
+                .pulls(&gh.repo_owner, &gh.repo_name)
+                .update(discussion.pr_id)
+                .state(pulls::State::Closed)
+                .send()
+                .await
+            {
+                error!("Failed to close PR #{}: {e}", discussion.pr_id);
+
+                ctx.reply("Failed to close PR.").await?;
+                // Not returning here since closing is really not essential, it's already marked
+            }
         }
     }
 
@@ -184,26 +218,33 @@ pub async fn cr_complete(
         return Ok(());
     };
 
-    ctx.defer().await?;
-
     ctx.reply(format!(
         "This discussion has been closed: **{}**.",
         outcome.name()
     ))
     .await?;
 
-    if let Some(mut channel) = ctx.guild_channel().await {
-        if let Err(e) = channel
-            .edit_thread(&ctx, EditThread::new().archived(true))
-            .await
-        {
-            error!(
-                "Failed to close thread for PR#{} ({}): {e}",
-                discussion.pr_id, channel.id
-            );
-            ctx.reply("Failed to archive thread. Lacking permissions.")
-                .await?;
-        }
+    let tag = match outcome {
+        CrOutcome::TestMerge => forum.tag_cr_test_merge,
+        CrOutcome::Approved => forum.tag_cr_approved,
+        CrOutcome::Denied => forum.tag_cr_denied,
+    };
+
+    if let Err(e) = channel
+        .edit_thread(
+            &ctx,
+            EditThread::new()
+                .archived(true)
+                .applied_tags(channel.applied_tags.iter().chain([tag].iter()).cloned()),
+        )
+        .await
+    {
+        error!(
+            "Failed to label and archive thread for PR#{} ({}): {e}",
+            discussion.pr_id, channel.id
+        );
+        ctx.reply("Failed to label and archive thread. Lacking permissions.")
+            .await?;
     }
 
     Ok(())
