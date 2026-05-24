@@ -5,7 +5,7 @@ use poise::{
     ChoiceParameter, CommandParameterChoice,
     serenity_prelude::{ComponentInteraction, CreateInteractionResponseMessage, RoleId, UserId},
 };
-use tracing::{error, info, warn};
+use tracing::{error, info};
 
 use crate::discord::{
     Context, Error,

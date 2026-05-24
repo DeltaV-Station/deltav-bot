@@ -1,4 +1,4 @@
-use octocrab::{params::pulls, pulls::UpdatePullRequestBuilder};
+use octocrab::params::pulls;
 use poise::{
     ChoiceParameter,
     serenity_prelude::{
