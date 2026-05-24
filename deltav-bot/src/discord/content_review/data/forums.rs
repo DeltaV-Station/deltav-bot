@@ -4,7 +4,7 @@ use tracing::{error, info, warn};
 
 use crate::discord::content_review::{
     HandledError,
-    data::{config::Config, macros::id_to_int},
+    data::{config::CrConfig, macros::id_to_int},
 };
 
 #[derive(Debug, Copy, Clone)]
@@ -75,18 +75,29 @@ impl ForumRecord {
     };
     }
 
-    pub async fn delete(&self, db: &Pool<Sqlite>) -> Result<(), HandledError> {
-        delete_forum_by_channel(db, self.channel_id).await
+    pub async fn delete(&self, db: &Pool<Sqlite>, config: &CrConfig) -> Result<(), HandledError> {
+        delete_forum_by_channel(db, config, self.channel_id).await
     }
 }
 
 pub async fn delete_forum_by_channel(
     db: &Pool<Sqlite>,
+    config: &CrConfig,
     channel_id: ChannelId,
 ) -> Result<(), HandledError> {
-    if Config::get_intake_forum(&db).await == Some(channel_id) {
-        warn!("Main direction forum is being deleted.");
-        Config::set_intake_forum(&db, None).await?;
+    if config.get_intake_forum().await == Some(channel_id) {
+        warn!("Intake CR forum is being deleted.");
+        config.set_intake_forum(None).await?;
+    }
+
+    if config.get_private_forum().await == Some(channel_id) {
+        warn!("Private CR forum is being deleted.");
+        config.set_private_forum(None).await?;
+    }
+
+    if config.get_public_forum().await == Some(channel_id) {
+        warn!("Public CR forum is being deleted.");
+        config.set_public_forum(None).await?;
     }
 
     id_to_int!(channel_id);

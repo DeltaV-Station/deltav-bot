@@ -12,7 +12,7 @@ use crate::{
     discord::{
         EMBED_DESC_MAX_LEN,
         content_review::data::{
-            config::Config, discussions::DiscussionRecord, forums::ForumRecord,
+            config::CrConfig, discussions::DiscussionRecord, forums::ForumRecord,
         },
         content_review::{
             BUTTON_ID_ACTION_NOT_NEEDED, BUTTON_ID_ACTION_START_PRIVATE,
@@ -30,6 +30,7 @@ pub async fn cr_github_task(
     receiver: Arc<Mutex<Receiver<GitHubMessage>>>,
     db: Pool<Sqlite>,
     gh: Arc<GitHub>,
+    config: CrConfig,
 ) {
     while let Some(message) = receiver.lock().await.recv().await {
         match message {
@@ -39,7 +40,7 @@ pub async fn cr_github_task(
                 pr_body,
                 opened_by,
             } => {
-                let Some(main_forum) = Config::get_intake_forum(&db).await else {
+                let Some(main_forum) = config.get_intake_forum().await else {
                     warn!("Received PrOpened but main forum is not set.");
                     continue;
                 };

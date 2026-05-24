@@ -1,0 +1,68 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT * FROM cr_config WHERE id = 1",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "intake_cr_forum",
+        "ordinal": 1,
+        "type_info": "Integer"
+      },
+      {
+        "name": "public_cr_forum",
+        "ordinal": 2,
+        "type_info": "Integer"
+      },
+      {
+        "name": "private_cr_forum",
+        "ordinal": 3,
+        "type_info": "Integer"
+      },
+      {
+        "name": "gh_label_no_review",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "gh_label_under_review",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "review_ping_role",
+        "ordinal": 6,
+        "type_info": "Integer"
+      },
+      {
+        "name": "gh_label_cr_approved",
+        "ordinal": 7,
+        "type_info": "Text"
+      },
+      {
+        "name": "gh_label_cr_denied",
+        "ordinal": 8,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "a9b293f1b1684d1f9f1830ef0d31bc8d27053adf49c3ef704024dbfcbcc2d682"
+}

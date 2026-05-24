@@ -10,7 +10,10 @@ use tracing::{error, info};
 
 use crate::{
     discord::{
-        content_review::{component_events::cr_component_task, cr, github_events::cr_github_task},
+        content_review::{
+            component_events::cr_component_task, cr, data::config::CrConfig,
+            github_events::cr_github_task,
+        },
         permissions::{
             data::{PermissionFlags, Permissions},
             perms,
@@ -30,6 +33,7 @@ struct Data {
     permissions: Permissions,
     // TODO: need to use the receiver in the event handler, which receives a read-only ref. there's probably a more sane way to do this, but it works for now.
     gh_receiver: Arc<Mutex<Receiver<GitHubMessage>>>,
+    cr_config: CrConfig,
 }
 type Error = Box<dyn std::error::Error + Send + Sync>;
 type Context<'a> = poise::Context<'a, Data, Error>;
@@ -70,6 +74,7 @@ pub async fn initialize(
                 Ok(Data {
                     gh: Arc::new(github),
                     permissions: Permissions::new(db.clone()),
+                    cr_config: CrConfig::from_db(db.clone()).await.unwrap(),
                     db,
                     gh_receiver: Arc::new(Mutex::new(receiver)),
                 })
@@ -116,6 +121,7 @@ async fn event_handler(
                 data.gh_receiver.clone(),
                 data.db.clone(),
                 data.gh.clone(),
+                data.cr_config.clone(),
             ));
 
             tokio::spawn(cr_component_task(
@@ -123,6 +129,7 @@ async fn event_handler(
                 data.db.clone(),
                 data.gh.clone(),
                 data.permissions.clone(),
+                data.cr_config.clone(),
             ));
         }
         _ => {}

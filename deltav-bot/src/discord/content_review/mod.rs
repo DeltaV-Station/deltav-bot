@@ -11,7 +11,6 @@ use crate::{
     discord::{
         Context, EMBED_DESC_MAX_LEN, Error,
         content_review::data::{
-            config::Config,
             discussions::DiscussionRecord,
             forums::{ForumRecord, delete_forum_by_channel},
         },
@@ -108,16 +107,17 @@ pub async fn cr_complete(
         return Ok(());
     };
 
-    let Some(under_review_label) = Config::get_under_review_label(&ctx.data().db).await else {
+    let Some(under_review_label) = ctx.data().cr_config.get_under_review_label().await else {
         ctx.reply("Can't close with unset Under Review label.")
             .await?;
         return Ok(());
     };
 
     let gh = &ctx.data().gh;
+    let config = &ctx.data().cr_config;
     match outcome {
         CrOutcome::Approved | CrOutcome::TestMerge => {
-            let Some(approved_label) = Config::get_approved_label(&ctx.data().db).await else {
+            let Some(approved_label) = config.get_approved_label().await else {
                 ctx.reply("Can't close with unset CR Approved label.")
                     .await?;
                 return Ok(());
@@ -141,7 +141,7 @@ pub async fn cr_complete(
             };
         }
         CrOutcome::Denied => {
-            let Some(denied_label) = Config::get_denied_label(&ctx.data().db).await else {
+            let Some(denied_label) = config.get_denied_label().await else {
                 ctx.reply("Can't close with unset CR Denied label.").await?;
                 return Ok(());
             };
@@ -277,8 +277,10 @@ pub async fn cr_config(
         return Ok(());
     }
 
+    let config = &ctx.data().cr_config;
+
     if let Some(intake_cr_forum) = intake_cr_forum {
-        if let Err(e) = Config::set_intake_forum(&ctx.data().db, Some(intake_cr_forum)).await {
+        if let Err(e) = config.set_intake_forum(Some(intake_cr_forum)).await {
             ctx.reply(format!("Failed to set intake forum: {e}"))
                 .await?;
             return Ok(());
@@ -286,7 +288,7 @@ pub async fn cr_config(
     }
 
     if let Some(public_cr_forum) = public_cr_forum {
-        if let Err(e) = Config::set_public_forum(&ctx.data().db, Some(public_cr_forum)).await {
+        if let Err(e) = config.set_public_forum(Some(public_cr_forum)).await {
             ctx.reply(format!("Failed to set public forum: {e}"))
                 .await?;
             return Ok(());
@@ -294,7 +296,7 @@ pub async fn cr_config(
     }
 
     if let Some(private_cr_forum) = private_cr_forum {
-        if let Err(e) = Config::set_private_forum(&ctx.data().db, Some(private_cr_forum)).await {
+        if let Err(e) = config.set_private_forum(Some(private_cr_forum)).await {
             ctx.reply(format!("Failed to set private forum: {e}"))
                 .await?;
             return Ok(());
@@ -302,8 +304,9 @@ pub async fn cr_config(
     }
 
     if let Some(no_review_needed_label) = gh_label_no_review {
-        if let Err(e) =
-            Config::set_no_review_needed_label(&ctx.data().db, no_review_needed_label).await
+        if let Err(e) = config
+            .set_no_review_needed_label(no_review_needed_label)
+            .await
         {
             ctx.reply(format!("Error: {e}")).await?;
             return Ok(());
@@ -311,28 +314,28 @@ pub async fn cr_config(
     }
 
     if let Some(under_review_label) = gh_label_under_review {
-        if let Err(e) = Config::set_under_review_label(&ctx.data().db, under_review_label).await {
+        if let Err(e) = config.set_under_review_label(under_review_label).await {
             ctx.reply(format!("Error: {e}")).await?;
             return Ok(());
         }
     }
 
     if let Some(approved_label) = gh_label_approved {
-        if let Err(e) = Config::set_approved_label(&ctx.data().db, approved_label).await {
+        if let Err(e) = config.set_approved_label(approved_label).await {
             ctx.reply(format!("Error: {e}")).await?;
             return Ok(());
         }
     }
 
     if let Some(denied_label) = gh_label_denied {
-        if let Err(e) = Config::set_denied_label(&ctx.data().db, denied_label).await {
+        if let Err(e) = config.set_denied_label(denied_label).await {
             ctx.reply(format!("Error: {e}")).await?;
             return Ok(());
         }
     }
 
     if let Some(review_ping_role) = review_ping_role {
-        if let Err(e) = Config::set_review_ping_role(&ctx.data().db, Some(review_ping_role)).await {
+        if let Err(e) = config.set_review_ping_role(Some(review_ping_role)).await {
             ctx.reply(format!("Error: {e}")).await?;
             return Ok(());
         }
@@ -387,7 +390,7 @@ pub async fn cr_forum_delete(ctx: Context<'_>, forum: ChannelId) -> Result<(), E
         return Ok(());
     }
 
-    match delete_forum_by_channel(&ctx.data().db, forum).await {
+    match delete_forum_by_channel(&ctx.data().db, &ctx.data().cr_config, forum).await {
         Ok(_) => {
             ctx.reply("Processed without errors.").await?;
         }

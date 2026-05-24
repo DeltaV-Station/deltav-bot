@@ -18,7 +18,7 @@ use crate::{
         content_review::{
             BUTTON_ID_ACTION_NOT_NEEDED, BUTTON_ID_ACTION_START_PRIVATE,
             BUTTON_ID_ACTION_START_PUBLIC, HandledError, INTERACTION_ID_PREFIX, create_pr_embed,
-            data::{config::Config, discussions::DiscussionRecord},
+            data::{config::CrConfig, discussions::DiscussionRecord},
             discussion_channel_to_guild,
         },
         permissions::{
@@ -65,27 +65,31 @@ pub async fn start_review_task(
     ctx: poise::serenity_prelude::Context,
     discussion: DiscussionRecord,
     db: Pool<Sqlite>,
+    config: CrConfig,
     gh: Arc<GitHub>,
     intake_thread: ChannelId,
     private: bool,
 ) {
     async fn inner(
-        interaction: ComponentInteraction,
-        ctx: poise::serenity_prelude::Context,
+        interaction: &ComponentInteraction,
+        ctx: &poise::serenity_prelude::Context,
         mut discussion: DiscussionRecord,
         db: Pool<Sqlite>,
+        config: CrConfig,
         gh: Arc<GitHub>,
         intake_thread: ChannelId,
         private: bool,
     ) -> Result<(), HandledError> {
         let forum_channel = if private {
-            Config::get_private_forum(&db)
+            config
+                .get_private_forum()
                 .await
                 .ok_or(HandledError::UserfacingError(
                     "Can't process review start with private forum unset.".into(),
                 ))?
         } else {
-            Config::get_public_forum(&db)
+            config
+                .get_public_forum()
                 .await
                 .ok_or(HandledError::UserfacingError(
                     "Can't process review start with public forum unset.".into(),
@@ -93,7 +97,8 @@ pub async fn start_review_task(
         };
 
         let under_review_label =
-            Config::get_under_review_label(&db)
+            config
+                .get_under_review_label()
                 .await
                 .ok_or(HandledError::UserfacingError(
                     "Can't process review start with under review label unset.".into(),
@@ -184,7 +189,7 @@ pub async fn start_review_task(
             .field("Due", format!("<t:{}:R>", due_at.timestamp()), true),
         ]);
 
-        if let Some(ping_role) = Config::get_review_ping_role(&db).await {
+        if let Some(ping_role) = config.get_review_ping_role().await {
             message = message
                 .allowed_mentions(CreateAllowedMentions::new().roles([ping_role]))
                 .content(format!("<@&{}>", ping_role.get()));
@@ -224,10 +229,11 @@ pub async fn start_review_task(
     }
 
     match inner(
-        interaction.clone(),
-        ctx.clone(),
+        &interaction,
+        &ctx,
         discussion,
         db,
+        config,
         gh,
         intake_thread,
         private,
@@ -253,19 +259,22 @@ pub async fn no_review_needed_task(
     ctx: poise::serenity_prelude::Context,
     discussion: DiscussionRecord,
     db: Pool<Sqlite>,
+    config: CrConfig,
     gh: Arc<GitHub>,
     intake_thread: ChannelId,
 ) {
     async fn inner(
-        interaction: ComponentInteraction,
-        ctx: poise::serenity_prelude::Context,
+        interaction: &ComponentInteraction,
+        ctx: &poise::serenity_prelude::Context,
         discussion: DiscussionRecord,
         db: Pool<Sqlite>,
+        config: CrConfig,
         gh: Arc<GitHub>,
         intake_thread: ChannelId,
     ) -> Result<(), HandledError> {
         let no_review_needed_label =
-            Config::get_no_review_needed_label(&db)
+            config
+                .get_no_review_needed_label()
                 .await
                 .ok_or(HandledError::UserfacingError(
                     "Can't process No Review Needed with GitHub label unset.".into(),
@@ -315,10 +324,11 @@ pub async fn no_review_needed_task(
     }
 
     match inner(
-        interaction.clone(),
-        ctx.clone(),
+        &interaction,
+        &ctx,
         discussion,
         db,
+        config,
         gh,
         intake_thread,
     )
@@ -345,6 +355,7 @@ pub async fn cr_component_task(
     db: Pool<Sqlite>,
     gh: Arc<GitHub>,
     permissions: Permissions,
+    config: CrConfig,
 ) {
     while let Some(interaction) = ComponentInteractionCollector::new(&ctx)
         .filter(move |i| {
@@ -411,7 +422,7 @@ pub async fn cr_component_task(
                     continue;
                 };
 
-                let Some(intake_forum) = Config::get_intake_forum(&db).await else {
+                let Some(intake_forum) = config.get_intake_forum().await else {
                     error!("Can't process interaction without intake forum.");
                     let _ = interaction
                         .edit_response(
@@ -442,6 +453,7 @@ pub async fn cr_component_task(
                             ctx.clone(),
                             discussion,
                             db.clone(),
+                            config.clone(),
                             gh.clone(),
                             intake_thread,
                             false,
@@ -454,6 +466,7 @@ pub async fn cr_component_task(
                             ctx.clone(),
                             discussion,
                             db.clone(),
+                            config.clone(),
                             gh.clone(),
                             intake_thread,
                             true,
@@ -466,6 +479,7 @@ pub async fn cr_component_task(
                             ctx.clone(),
                             discussion,
                             db.clone(),
+                            config.clone(),
                             gh.clone(),
                             intake_thread,
                         ));

@@ -1,35 +1,81 @@
+use std::sync::Arc;
+
 use poise::serenity_prelude::{ChannelId, RoleId};
 use sqlx::{Pool, Sqlite};
+use tokio::sync::RwLock;
 use tracing::{error, info, warn};
 
 use crate::discord::content_review::HandledError;
 
-// TODO: This should hold a cache and be passed around
-pub struct Config {}
+#[derive(Clone)]
+pub struct CrConfig {
+    db: Pool<Sqlite>,
+    cache: Arc<RwLock<ConfigCache>>,
+}
 
-impl Config {
-    pub async fn get_intake_forum(db: &Pool<Sqlite>) -> Option<ChannelId> {
-        let row = match sqlx::query!("SELECT intake_cr_forum FROM cr_config WHERE id = 1")
-            .fetch_optional(db)
+#[derive(Default)]
+struct ConfigCache {
+    intake_forum: Option<ChannelId>,
+    private_forum: Option<ChannelId>,
+    public_forum: Option<ChannelId>,
+
+    ghl_under_review: Option<String>,
+    ghl_not_needed: Option<String>,
+    ghl_approved: Option<String>,
+    ghl_denied: Option<String>,
+
+    review_ping_role: Option<RoleId>,
+}
+
+impl CrConfig {
+    pub async fn from_db(db: Pool<Sqlite>) -> Result<Self, Box<dyn std::error::Error>> {
+        info!("Loading CR Config from DB.");
+        match sqlx::query!("SELECT * FROM cr_config WHERE id = 1")
+            .fetch_optional(&db)
             .await
         {
-            Ok(Some(x)) => x,
+            Ok(Some(x)) => Ok(Self {
+                db,
+                cache: Arc::new(RwLock::new(ConfigCache {
+                    ghl_approved: x.gh_label_cr_approved,
+                    ghl_denied: x.gh_label_cr_denied,
+                    ghl_not_needed: x.gh_label_no_review,
+                    ghl_under_review: x.gh_label_under_review,
+                    intake_forum: x
+                        .intake_cr_forum
+                        .and_then(|x| Some(ChannelId::new(x.cast_unsigned()))),
+                    private_forum: x
+                        .private_cr_forum
+                        .and_then(|x| Some(ChannelId::new(x.cast_unsigned()))),
+                    public_forum: x
+                        .public_cr_forum
+                        .and_then(|x| Some(ChannelId::new(x.cast_unsigned()))),
+                    review_ping_role: x
+                        .review_ping_role
+                        .and_then(|x| Some(RoleId::new(x.cast_unsigned()))),
+                })),
+            }),
             Ok(None) => {
                 warn!("Missing config row.");
-                return None;
+
+                Ok(Self {
+                    db,
+                    cache: Arc::new(RwLock::new(ConfigCache::default())),
+                })
             }
             Err(e) => {
-                error!("Failed to fetch intake CR forum: {e}");
-                return None;
+                error!("Failed to fetch config row: {e}");
+                Err(Box::new(e))
             }
-        };
+        }
+    }
 
-        row.intake_cr_forum
-            .and_then(|x| Some(ChannelId::new(x.cast_unsigned())))
+    pub async fn get_intake_forum(&self) -> Option<ChannelId> {
+        self.cache.read().await.intake_forum
     }
 
     pub async fn set_intake_forum(
-        db: &Pool<Sqlite>,
+        &self,
         channel_id: Option<ChannelId>,
     ) -> Result<(), HandledError> {
         let new_id = channel_id.and_then(|x| Some(x.get().cast_signed()));
@@ -42,11 +88,12 @@ impl Config {
             "#,
             new_id
         )
-        .execute(db)
+        .execute(&self.db)
         .await
         {
             Ok(_) => {
                 info!("Intake CR forum set to {channel_id:?}.");
+                self.cache.write().await.intake_forum = channel_id;
                 return Ok(());
             }
             Err(e) => {
@@ -58,28 +105,12 @@ impl Config {
         };
     }
 
-    pub async fn get_public_forum(db: &Pool<Sqlite>) -> Option<ChannelId> {
-        let row = match sqlx::query!("SELECT public_cr_forum FROM cr_config WHERE id = 1")
-            .fetch_optional(db)
-            .await
-        {
-            Ok(Some(x)) => x,
-            Ok(None) => {
-                warn!("Missing config row.");
-                return None;
-            }
-            Err(e) => {
-                error!("Failed to fetch public CR forum: {e}");
-                return None;
-            }
-        };
-
-        row.public_cr_forum
-            .and_then(|x| Some(ChannelId::new(x.cast_unsigned())))
+    pub async fn get_public_forum(&self) -> Option<ChannelId> {
+        self.cache.read().await.public_forum
     }
 
     pub async fn set_public_forum(
-        db: &Pool<Sqlite>,
+        &self,
         channel_id: Option<ChannelId>,
     ) -> Result<(), HandledError> {
         let new_id = channel_id.and_then(|x| Some(x.get().cast_signed()));
@@ -92,11 +123,12 @@ impl Config {
             "#,
             new_id
         )
-        .execute(db)
+        .execute(&self.db)
         .await
         {
             Ok(_) => {
                 info!("Public CR forum set to {channel_id:?}.");
+                self.cache.write().await.public_forum = channel_id;
                 return Ok(());
             }
             Err(e) => {
@@ -108,28 +140,12 @@ impl Config {
         };
     }
 
-    pub async fn get_private_forum(db: &Pool<Sqlite>) -> Option<ChannelId> {
-        let row = match sqlx::query!("SELECT private_cr_forum FROM cr_config WHERE id = 1")
-            .fetch_optional(db)
-            .await
-        {
-            Ok(Some(x)) => x,
-            Ok(None) => {
-                warn!("Missing config row.");
-                return None;
-            }
-            Err(e) => {
-                error!("Failed to fetch private CR forum: {e}");
-                return None;
-            }
-        };
-
-        row.private_cr_forum
-            .and_then(|x| Some(ChannelId::new(x.cast_unsigned())))
+    pub async fn get_private_forum(&self) -> Option<ChannelId> {
+        self.cache.read().await.private_forum
     }
 
     pub async fn set_private_forum(
-        db: &Pool<Sqlite>,
+        &self,
         channel_id: Option<ChannelId>,
     ) -> Result<(), HandledError> {
         let new_id = channel_id.and_then(|x| Some(x.get().cast_signed()));
@@ -142,11 +158,12 @@ impl Config {
             "#,
             new_id
         )
-        .execute(db)
+        .execute(&self.db)
         .await
         {
             Ok(_) => {
                 info!("Private CR forum set to {channel_id:?}.");
+                self.cache.write().await.private_forum = channel_id;
                 return Ok(());
             }
             Err(e) => {
@@ -158,10 +175,7 @@ impl Config {
         };
     }
 
-    pub async fn set_no_review_needed_label(
-        db: &Pool<Sqlite>,
-        label: String,
-    ) -> Result<(), HandledError> {
+    pub async fn set_no_review_needed_label(&self, label: String) -> Result<(), HandledError> {
         match sqlx::query!(
             r#"
             INSERT INTO cr_config (id, gh_label_no_review)
@@ -171,11 +185,12 @@ impl Config {
             "#,
             label
         )
-        .execute(db)
+        .execute(&self.db)
         .await
         {
             Ok(_) => {
                 info!("No review needed label set to '{label}'.");
+                self.cache.write().await.ghl_not_needed = Some(label);
                 return Ok(());
             }
             Err(e) => {
@@ -185,35 +200,11 @@ impl Config {
         };
     }
 
-    pub async fn get_under_review_label(db: &Pool<Sqlite>) -> Option<String> {
-        let row = match sqlx::query!(
-            r#"
-            SELECT gh_label_under_review
-            FROM cr_config
-            WHERE ID = 1
-            "#,
-        )
-        .fetch_optional(db)
-        .await
-        {
-            Ok(Some(x)) => x,
-            Ok(None) => {
-                warn!("Missing config row.");
-                return None;
-            }
-            Err(e) => {
-                error!("Failed to fetch under review needed label: {e}");
-                return None;
-            }
-        };
-
-        row.gh_label_under_review
+    pub async fn get_under_review_label(&self) -> Option<String> {
+        self.cache.read().await.ghl_under_review.clone()
     }
 
-    pub async fn set_under_review_label(
-        db: &Pool<Sqlite>,
-        label: String,
-    ) -> Result<(), HandledError> {
+    pub async fn set_under_review_label(&self, label: String) -> Result<(), HandledError> {
         match sqlx::query!(
             r#"
             INSERT INTO cr_config (id, gh_label_under_review)
@@ -223,11 +214,12 @@ impl Config {
             "#,
             label
         )
-        .execute(db)
+        .execute(&self.db)
         .await
         {
             Ok(_) => {
                 info!("Under review label set to '{label}'.");
+                self.cache.write().await.ghl_under_review = Some(label);
                 return Ok(());
             }
             Err(e) => {
@@ -237,57 +229,15 @@ impl Config {
         };
     }
 
-    pub async fn get_no_review_needed_label(db: &Pool<Sqlite>) -> Option<String> {
-        let row = match sqlx::query!(
-            r#"
-            SELECT gh_label_no_review
-            FROM cr_config
-            WHERE ID = 1
-            "#,
-        )
-        .fetch_optional(db)
-        .await
-        {
-            Ok(Some(x)) => x,
-            Ok(None) => {
-                warn!("Missing config row.");
-                return None;
-            }
-            Err(e) => {
-                error!("Failed to fetch no review needed label: {e}");
-                return None;
-            }
-        };
-
-        row.gh_label_no_review
+    pub async fn get_no_review_needed_label(&self) -> Option<String> {
+        self.cache.read().await.ghl_not_needed.clone()
     }
 
-    pub async fn get_approved_label(db: &Pool<Sqlite>) -> Option<String> {
-        let row = match sqlx::query!(
-            r#"
-            SELECT gh_label_cr_approved
-            FROM cr_config
-            WHERE ID = 1
-            "#,
-        )
-        .fetch_optional(db)
-        .await
-        {
-            Ok(Some(x)) => x,
-            Ok(None) => {
-                warn!("Missing config row.");
-                return None;
-            }
-            Err(e) => {
-                error!("Failed to fetch approved label: {e}");
-                return None;
-            }
-        };
-
-        row.gh_label_cr_approved
+    pub async fn get_approved_label(&self) -> Option<String> {
+        self.cache.read().await.ghl_approved.clone()
     }
 
-    pub async fn set_approved_label(db: &Pool<Sqlite>, label: String) -> Result<(), HandledError> {
+    pub async fn set_approved_label(&self, label: String) -> Result<(), HandledError> {
         match sqlx::query!(
             r#"
             INSERT INTO cr_config (id, gh_label_cr_approved)
@@ -297,11 +247,12 @@ impl Config {
             "#,
             label
         )
-        .execute(db)
+        .execute(&self.db)
         .await
         {
             Ok(_) => {
                 info!("CR approved label set to '{label}'.");
+                self.cache.write().await.ghl_approved = Some(label);
                 return Ok(());
             }
             Err(e) => {
@@ -311,32 +262,11 @@ impl Config {
         };
     }
 
-    pub async fn get_denied_label(db: &Pool<Sqlite>) -> Option<String> {
-        let row = match sqlx::query!(
-            r#"
-            SELECT gh_label_cr_denied
-            FROM cr_config
-            WHERE ID = 1
-            "#,
-        )
-        .fetch_optional(db)
-        .await
-        {
-            Ok(Some(x)) => x,
-            Ok(None) => {
-                warn!("Missing config row.");
-                return None;
-            }
-            Err(e) => {
-                error!("Failed to fetch CR denied label: {e}");
-                return None;
-            }
-        };
-
-        row.gh_label_cr_denied
+    pub async fn get_denied_label(&self) -> Option<String> {
+        self.cache.read().await.ghl_denied.clone()
     }
 
-    pub async fn set_denied_label(db: &Pool<Sqlite>, label: String) -> Result<(), HandledError> {
+    pub async fn set_denied_label(&self, label: String) -> Result<(), HandledError> {
         match sqlx::query!(
             r#"
             INSERT INTO cr_config (id, gh_label_cr_denied)
@@ -346,11 +276,12 @@ impl Config {
             "#,
             label
         )
-        .execute(db)
+        .execute(&self.db)
         .await
         {
             Ok(_) => {
                 info!("CR Denied label set to '{label}'.");
+                self.cache.write().await.ghl_denied = Some(label);
                 return Ok(());
             }
             Err(e) => {
@@ -360,30 +291,11 @@ impl Config {
         };
     }
 
-    pub async fn get_review_ping_role(db: &Pool<Sqlite>) -> Option<RoleId> {
-        let row = match sqlx::query!("SELECT review_ping_role FROM cr_config WHERE id = 1")
-            .fetch_optional(db)
-            .await
-        {
-            Ok(Some(x)) => x,
-            Ok(None) => {
-                warn!("Missing config row.");
-                return None;
-            }
-            Err(e) => {
-                error!("Failed to review ping role: {e}");
-                return None;
-            }
-        };
-
-        row.review_ping_role
-            .and_then(|x| Some(RoleId::new(x.cast_unsigned())))
+    pub async fn get_review_ping_role(&self) -> Option<RoleId> {
+        self.cache.read().await.review_ping_role
     }
 
-    pub async fn set_review_ping_role(
-        db: &Pool<Sqlite>,
-        role_id: Option<RoleId>,
-    ) -> Result<(), HandledError> {
+    pub async fn set_review_ping_role(&self, role_id: Option<RoleId>) -> Result<(), HandledError> {
         let new_id = role_id.and_then(|x| Some(x.get().cast_signed()));
         match sqlx::query!(
             r#"
@@ -394,11 +306,12 @@ impl Config {
                 "#,
             new_id
         )
-        .execute(db)
+        .execute(&self.db)
         .await
         {
             Ok(_) => {
                 info!("Review ping role set to {role_id:?}.");
+                self.cache.write().await.review_ping_role = role_id;
                 return Ok(());
             }
             Err(e) => {
