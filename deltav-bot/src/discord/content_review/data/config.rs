@@ -2,6 +2,8 @@ use poise::serenity_prelude::{ChannelId, RoleId};
 use sqlx::{Pool, Sqlite};
 use tracing::{error, info, warn};
 
+use crate::discord::content_review::HandledError;
+
 // TODO: This should hold a cache and be passed around
 pub struct Config {}
 
@@ -17,7 +19,7 @@ impl Config {
                 return None;
             }
             Err(e) => {
-                error!("Failed to fetch intake CR forum: {e:#?}");
+                error!("Failed to fetch intake CR forum: {e}");
                 return None;
             }
         };
@@ -29,7 +31,7 @@ impl Config {
     pub async fn set_intake_forum(
         db: &Pool<Sqlite>,
         channel_id: Option<ChannelId>,
-    ) -> Result<(), String> {
+    ) -> Result<(), HandledError> {
         let new_id = channel_id.and_then(|x| Some(x.get().cast_signed()));
         match sqlx::query!(
             r#"
@@ -48,8 +50,10 @@ impl Config {
                 return Ok(());
             }
             Err(e) => {
-                error!("Failed to set intake CR forum: {e:#?}");
-                return Err("Did you register it as a forum first?".into());
+                error!("Failed to set intake CR forum: {e}");
+                return Err(HandledError::UserfacingError(
+                    "Failed to set intake forum. Did you register it as a forum first?".into(),
+                ));
             }
         };
     }
@@ -65,7 +69,7 @@ impl Config {
                 return None;
             }
             Err(e) => {
-                error!("Failed to fetch public CR forum: {e:#?}");
+                error!("Failed to fetch public CR forum: {e}");
                 return None;
             }
         };
@@ -77,7 +81,7 @@ impl Config {
     pub async fn set_public_forum(
         db: &Pool<Sqlite>,
         channel_id: Option<ChannelId>,
-    ) -> Result<(), String> {
+    ) -> Result<(), HandledError> {
         let new_id = channel_id.and_then(|x| Some(x.get().cast_signed()));
         match sqlx::query!(
             r#"
@@ -96,8 +100,10 @@ impl Config {
                 return Ok(());
             }
             Err(e) => {
-                error!("Failed to set public CR forum: {e:#?}");
-                return Err("Did you register it as a forum first?".into());
+                error!("Failed to set public CR forum: {e}");
+                return Err(HandledError::UserfacingError(
+                    "Did you register it as a forum first?".into(),
+                ));
             }
         };
     }
@@ -113,7 +119,7 @@ impl Config {
                 return None;
             }
             Err(e) => {
-                error!("Failed to fetch private CR forum: {e:#?}");
+                error!("Failed to fetch private CR forum: {e}");
                 return None;
             }
         };
@@ -125,7 +131,7 @@ impl Config {
     pub async fn set_private_forum(
         db: &Pool<Sqlite>,
         channel_id: Option<ChannelId>,
-    ) -> Result<(), String> {
+    ) -> Result<(), HandledError> {
         let new_id = channel_id.and_then(|x| Some(x.get().cast_signed()));
         match sqlx::query!(
             r#"
@@ -144,13 +150,18 @@ impl Config {
                 return Ok(());
             }
             Err(e) => {
-                error!("Failed to set private CR forum: {e:#?}");
-                return Err("Did you register it as a forum first?".into());
+                error!("Failed to set private CR forum: {e}");
+                return Err(HandledError::UserfacingError(
+                    "Did you register it as a forum first?".into(),
+                ));
             }
         };
     }
 
-    pub async fn set_no_review_needed_label(db: &Pool<Sqlite>, label: String) -> Result<(), ()> {
+    pub async fn set_no_review_needed_label(
+        db: &Pool<Sqlite>,
+        label: String,
+    ) -> Result<(), HandledError> {
         match sqlx::query!(
             r#"
             INSERT INTO cr_config (id, gh_label_no_review)
@@ -168,8 +179,8 @@ impl Config {
                 return Ok(());
             }
             Err(e) => {
-                error!("Failed to set no review needed label: {e:#?}");
-                return Err(());
+                error!("Failed to set no review needed label: {e}");
+                return Err(HandledError::InternalError);
             }
         };
     }
@@ -191,7 +202,7 @@ impl Config {
                 return None;
             }
             Err(e) => {
-                error!("Failed to fetch under review needed label: {e:#?}");
+                error!("Failed to fetch under review needed label: {e}");
                 return None;
             }
         };
@@ -199,7 +210,10 @@ impl Config {
         row.gh_label_under_review
     }
 
-    pub async fn set_under_review_label(db: &Pool<Sqlite>, label: String) -> Result<(), ()> {
+    pub async fn set_under_review_label(
+        db: &Pool<Sqlite>,
+        label: String,
+    ) -> Result<(), HandledError> {
         match sqlx::query!(
             r#"
             INSERT INTO cr_config (id, gh_label_under_review)
@@ -217,8 +231,8 @@ impl Config {
                 return Ok(());
             }
             Err(e) => {
-                error!("Failed to set under review label: {e:#?}");
-                return Err(());
+                error!("Failed to set under review label: {e}");
+                return Err(HandledError::InternalError);
             }
         };
     }
@@ -240,7 +254,7 @@ impl Config {
                 return None;
             }
             Err(e) => {
-                error!("Failed to fetch no review needed label: {e:#?}");
+                error!("Failed to fetch no review needed label: {e}");
                 return None;
             }
         };
@@ -259,7 +273,7 @@ impl Config {
                 return None;
             }
             Err(e) => {
-                error!("Failed to review ping role: {e:#?}");
+                error!("Failed to review ping role: {e}");
                 return None;
             }
         };
@@ -271,7 +285,7 @@ impl Config {
     pub async fn set_review_ping_role(
         db: &Pool<Sqlite>,
         role_id: Option<RoleId>,
-    ) -> Result<(), ()> {
+    ) -> Result<(), HandledError> {
         let new_id = role_id.and_then(|x| Some(x.get().cast_signed()));
         match sqlx::query!(
             r#"
@@ -290,8 +304,8 @@ impl Config {
                 return Ok(());
             }
             Err(e) => {
-                error!("Failed to set review ping role: {e:#?}");
-                return Err(());
+                error!("Failed to set review ping role: {e}");
+                return Err(HandledError::InternalError);
             }
         };
     }

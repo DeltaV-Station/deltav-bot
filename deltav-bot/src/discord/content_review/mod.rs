@@ -23,6 +23,16 @@ pub const BUTTON_ID_ACTION_START_PUBLIC: &'static str = "reviewStartPublic";
 pub const BUTTON_ID_ACTION_START_PRIVATE: &'static str = "reviewStartPrivate";
 pub const BUTTON_ID_ACTION_NOT_NEEDED: &'static str = "reviewNotNeeded";
 
+/// Error returned by underlying systems, denoting how the error should be presented to the user.
+/// If a function returns this type of Error, it must properly log all errors using `tracing::error`.
+#[derive(thiserror::Error, Debug)]
+pub enum HandledError {
+    #[error("{0}")]
+    UserfacingError(String),
+    #[error("An internal error occurred")]
+    InternalError,
+}
+
 async fn discussion_channel_to_guild(
     pr_id: u64,
     id: ChannelId,
@@ -104,34 +114,24 @@ pub async fn cr_config(
     }
 
     if let Some(no_review_needed_label) = gh_label_no_review {
-        if let Err(()) =
+        if let Err(e) =
             Config::set_no_review_needed_label(&ctx.data().db, no_review_needed_label).await
         {
-            ctx.reply(format!(
-                "Failed to set no review needed label due to an internal error."
-            ))
-            .await?;
+            ctx.reply(format!("Error: {e}")).await?;
             return Ok(());
         }
     }
 
     if let Some(under_review_label) = gh_label_under_review {
-        if let Err(()) = Config::set_under_review_label(&ctx.data().db, under_review_label).await {
-            ctx.reply(format!(
-                "Failed to set under review label due to an internal error."
-            ))
-            .await?;
+        if let Err(e) = Config::set_under_review_label(&ctx.data().db, under_review_label).await {
+            ctx.reply(format!("Error: {e}")).await?;
             return Ok(());
         }
     }
 
     if let Some(review_ping_role) = review_ping_role {
-        if let Err(()) = Config::set_review_ping_role(&ctx.data().db, Some(review_ping_role)).await
-        {
-            ctx.reply(format!(
-                "Failed to set review ping role due to an internal error."
-            ))
-            .await?;
+        if let Err(e) = Config::set_review_ping_role(&ctx.data().db, Some(review_ping_role)).await {
+            ctx.reply(format!("Error: {e}")).await?;
             return Ok(());
         }
     }
@@ -168,9 +168,8 @@ pub async fn cr_forum_upsert(
         Ok(_) => {
             ctx.reply("Processed without errors.").await?;
         }
-        Err(()) => {
-            ctx.reply("Internal error occurred while upserting forum.")
-                .await?;
+        Err(e) => {
+            ctx.reply(format!("Failed to upsert forum: {e}")).await?;
         }
     }
 
@@ -186,9 +185,8 @@ pub async fn cr_forum_delete(ctx: Context<'_>, forum: ChannelId) -> Result<(), E
         Ok(_) => {
             ctx.reply("Processed without errors.").await?;
         }
-        Err(()) => {
-            ctx.reply("Internal error occurred while deleting forum.")
-                .await?;
+        Err(e) => {
+            ctx.reply(format!("Failed to delete forum {e}.")).await?;
         }
     }
 

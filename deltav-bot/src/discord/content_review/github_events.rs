@@ -131,9 +131,7 @@ pub async fn cr_github_task(
                             ..Default::default()
                         };
 
-                        if let Err(()) = discussion.insert(&db).await {
-                            error!("Could not record thread creation for PR #{pr_id} in database.");
-                        }
+                        let _ = discussion.insert(&db).await;
                     }
                     Err(e) => {
                         error!("Failed to create forum post for opened PR {pr_id}: {e:#?}");

@@ -2,7 +2,10 @@ use poise::serenity_prelude::{ChannelId, ForumTagId};
 use sqlx::{Pool, Sqlite};
 use tracing::{error, info, warn};
 
-use crate::discord::content_review::data::{config::Config, macros::id_to_int};
+use crate::discord::content_review::{
+    HandledError,
+    data::{config::Config, macros::id_to_int},
+};
 
 #[derive(Debug, Copy, Clone)]
 pub struct ForumRecord {
@@ -32,13 +35,13 @@ impl ForumRecord {
                 tag_pr_merged: ForumTagId::new(r.tag_pr_merged.cast_unsigned()),
             }),
             Err(e) => {
-                error!("Failed to get_forum {forum}: {e:#?}");
+                error!("Failed to get_forum {forum}: {e}");
                 None
             }
         }
     }
 
-    pub async fn upsert(&self, db: &Pool<Sqlite>) -> Result<(), ()> {
+    pub async fn upsert(&self, db: &Pool<Sqlite>) -> Result<(), HandledError> {
         let private: i64 = if self.private { 1 } else { 0 };
         let channel_id_s = self.channel_id.get().cast_signed();
         let tag_approved_s = self.tag_cr_approved.get().cast_signed();
@@ -66,21 +69,24 @@ impl ForumRecord {
             return Ok(());
         }
         Err(e) => {
-            error!("Failed to upsert direction forum: {e:#?}");
-            return Err(());
+            error!("Failed to upsert direction forum: {e}");
+            return Err(HandledError::InternalError);
         }
     };
     }
 
-    pub async fn delete(&self, db: &Pool<Sqlite>) -> Result<(), ()> {
+    pub async fn delete(&self, db: &Pool<Sqlite>) -> Result<(), HandledError> {
         delete_forum_by_channel(db, self.channel_id).await
     }
 }
 
-pub async fn delete_forum_by_channel(db: &Pool<Sqlite>, channel_id: ChannelId) -> Result<(), ()> {
+pub async fn delete_forum_by_channel(
+    db: &Pool<Sqlite>,
+    channel_id: ChannelId,
+) -> Result<(), HandledError> {
     if Config::get_intake_forum(&db).await == Some(channel_id) {
         warn!("Main direction forum is being deleted.");
-        Config::set_intake_forum(&db, None).await.map_err(|_| ())?;
+        Config::set_intake_forum(&db, None).await?;
     }
 
     id_to_int!(channel_id);
@@ -96,8 +102,8 @@ pub async fn delete_forum_by_channel(db: &Pool<Sqlite>, channel_id: ChannelId) -
             return Ok(());
         }
         Err(e) => {
-            error!("Failed to delete direction forum {channel_id}: {e:#?}");
-            return Err(());
+            error!("Failed to delete direction forum {channel_id}: {e}");
+            return Err(HandledError::InternalError);
         }
     };
 }

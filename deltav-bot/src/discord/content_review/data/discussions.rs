@@ -3,6 +3,8 @@ use poise::serenity_prelude::ChannelId;
 use sqlx::{Pool, Sqlite};
 use tracing::{error, warn};
 
+use crate::discord::content_review::HandledError;
+
 #[derive(Default, Debug, Clone)]
 pub struct DiscussionRecord {
     pub pr_id: u64,
@@ -23,7 +25,7 @@ impl DiscussionRecord {
         &mut self,
         db: &Pool<Sqlite>,
         new_thread: ChannelId,
-    ) -> Result<(), ()> {
+    ) -> Result<(), HandledError> {
         let new_thread_s = new_thread.get().cast_signed();
         let pr_id_s = self.pr_id.cast_signed();
 
@@ -36,11 +38,11 @@ impl DiscussionRecord {
         .await
         {
             error!(
-                "Failed to set new thread id {new_thread} for discussion of PR #{}: {e:#?}",
+                "Failed to set new thread id {new_thread} for discussion of PR #{}: {e}",
                 self.pr_id
             );
 
-            return Err(());
+            return Err(HandledError::InternalError);
         }
 
         self.thread_id = new_thread;
@@ -48,7 +50,7 @@ impl DiscussionRecord {
         Ok(())
     }
 
-    pub async fn delete(&self, db: &Pool<Sqlite>) -> Result<(), ()> {
+    pub async fn delete(&self, db: &Pool<Sqlite>) -> Result<(), HandledError> {
         let pr_id_s = self.pr_id.cast_signed();
         if let Err(e) = sqlx::query!("DELETE FROM cr_discussions WHERE pr_id = ?1", pr_id_s)
             .execute(db)
@@ -58,7 +60,7 @@ impl DiscussionRecord {
                 "Failed to delete discussion record for pr #{}: {e}",
                 self.pr_id
             );
-            return Err(());
+            return Err(HandledError::InternalError);
         }
 
         Ok(())
@@ -85,7 +87,7 @@ impl DiscussionRecord {
                 ..Default::default()
             }),
             Err(e) => {
-                warn!("Failed to get discussion by PR#{pr_id}: {e:#?}");
+                warn!("Failed to get discussion by PR#{pr_id}: {e}");
                 None
             }
         }
@@ -117,13 +119,13 @@ impl DiscussionRecord {
                 pr_body: r.pr_body,
             }),
             Err(e) => {
-                warn!("Failed to get discussion by thread {thread_id}: {e:#?}");
+                warn!("Failed to get discussion by thread {thread_id}: {e}");
                 None
             }
         }
     }
 
-    pub async fn insert(&self, db: &Pool<Sqlite>) -> Result<(), ()> {
+    pub async fn insert(&self, db: &Pool<Sqlite>) -> Result<(), HandledError> {
         let pr_id = self.pr_id.cast_signed();
         let forum_id = self.forum_id.get().cast_signed();
         let thread_id = self.thread_id.get().cast_signed();
@@ -150,13 +152,17 @@ impl DiscussionRecord {
         {
             Ok(_) => Ok(()),
             Err(e) => {
-                error!("Failed to insert CR discussion {self:?}: {e:#?}");
-                Err(())
+                error!("Failed to insert CR discussion {self:?}: {e}");
+                Err(HandledError::InternalError)
             }
         }
     }
 
-    pub async fn setup_review_time(&mut self, db: &Pool<Sqlite>, days: u64) -> Result<(), ()> {
+    pub async fn setup_review_time(
+        &mut self,
+        db: &Pool<Sqlite>,
+        days: u64,
+    ) -> Result<(), HandledError> {
         let review_days_total_s = Some(days.cast_signed());
         let review_days_passed_s = Some(0i64);
         let next_day = Utc::now().checked_add_days(Days::new(1));
@@ -183,8 +189,8 @@ impl DiscussionRecord {
                 Ok(())
             }
             Err(e) => {
-                error!("Failed to set up CR discussion review time {self:?}: {e:#?}");
-                Err(())
+                error!("Failed to set up CR discussion review time {self:?}: {e}");
+                Err(HandledError::InternalError)
             }
         }
     }

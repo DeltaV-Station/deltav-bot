@@ -14,13 +14,11 @@ use sqlx::{Pool, Sqlite};
 use tracing::error;
 
 use crate::{
-    discord::{
-        content_review::data::{config::Config, discussions::DiscussionRecord},
-        content_review::{
-            BUTTON_ID_ACTION_NOT_NEEDED, BUTTON_ID_ACTION_START_PRIVATE,
-            BUTTON_ID_ACTION_START_PUBLIC, INTERACTION_ID_PREFIX, create_pr_embed,
-            discussion_channel_to_guild,
-        },
+    discord::content_review::{
+        BUTTON_ID_ACTION_NOT_NEEDED, BUTTON_ID_ACTION_START_PRIVATE, BUTTON_ID_ACTION_START_PUBLIC,
+        HandledError, INTERACTION_ID_PREFIX, create_pr_embed,
+        data::{config::Config, discussions::DiscussionRecord},
+        discussion_channel_to_guild,
     },
     github::GitHub,
 };
@@ -73,20 +71,27 @@ pub async fn start_review_task(
         gh: Arc<GitHub>,
         intake_thread: ChannelId,
         private: bool,
-    ) -> Result<(), Option<&'static str>> {
+    ) -> Result<(), HandledError> {
         let forum_channel = if private {
             Config::get_private_forum(&db)
                 .await
-                .ok_or(Some("Did you set up the private forum?"))?
+                .ok_or(HandledError::UserfacingError(
+                    "Can't process review start with private forum unset.".into(),
+                ))?
         } else {
             Config::get_public_forum(&db)
                 .await
-                .ok_or(Some("Did you set up the public forum?"))?
+                .ok_or(HandledError::UserfacingError(
+                    "Can't process review start with public forum unset.".into(),
+                ))?
         };
 
-        let under_review_label = Config::get_under_review_label(&db).await.ok_or(Some(
-            "Can't process review start with under review label unset.",
-        ))?;
+        let under_review_label =
+            Config::get_under_review_label(&db)
+                .await
+                .ok_or(HandledError::UserfacingError(
+                    "Can't process review start with under review label unset.".into(),
+                ))?;
 
         let review_settings = execute_modal_on_component_interaction::<StartReviewModal>(
             CtxWrapper::new(&ctx),
@@ -97,24 +102,24 @@ pub async fn start_review_task(
         .await
         .map_err(|e| {
             error!("Failed to execute review settings modal: {e}");
-            None
+            HandledError::InternalError
         })?
-        .ok_or(None)?;
+        .ok_or(HandledError::UserfacingError("test".into()))?;
 
         let review_time_days = review_settings
             .review_time_days
             .parse::<u64>()
-            .map_err(|_| Some("Failed to parse review time."))?;
+            .map_err(|_| HandledError::UserfacingError("Failed to parse review time.".into()))?;
 
         if review_time_days > 90 {
-            return Err(Some(
-                "Invalid review time provided. It can't be longer than 90 days.",
+            return Err(HandledError::UserfacingError(
+                "Invalid review time provided. It can't be longer than 90 days.".into(),
             ));
         }
 
         let due_at = Utc::now()
             .checked_add_days(Days::new(review_time_days))
-            .ok_or(None)?;
+            .ok_or(HandledError::InternalError)?;
 
         gh.octo_install
             .issues(&gh.repo_owner, &gh.repo_name)
@@ -125,7 +130,10 @@ pub async fn start_review_task(
                     "Failed to set under review label for PR #{}: {e}",
                     discussion.pr_id
                 );
-                Some("Failed to set under review label on GitHub.")
+
+                return HandledError::UserfacingError(
+                    "Failed to set under review label on GitHub.".into(),
+                );
             })?;
 
         gh
@@ -149,7 +157,8 @@ pub async fn start_review_task(
                     "Failed to comment about CR review on PR #{}: {e}",
                     discussion.pr_id
                     );
-                    Some("Failed to add GitHub comment.")
+
+                    return HandledError::UserfacingError("Failed to add GitHub comment.".into());
                 }
             )?;
 
@@ -190,25 +199,19 @@ pub async fn start_review_task(
                     discussion.pr_id
                 );
 
-                Some("Failed to create forum post.")
+                HandledError::UserfacingError("Failed to create forum post.".into())
             })?;
 
-        discussion
-            .set_thread_id(&db, new_thread.id)
-            .await
-            .map_err(|()| None)?;
+        discussion.set_thread_id(&db, new_thread.id).await?;
 
-        discussion
-            .setup_review_time(&db, review_time_days)
-            .await
-            .map_err(|()| None)?;
+        discussion.setup_review_time(&db, review_time_days).await?;
 
         intake_thread.delete(&ctx).await.map_err(|e| {
             error!(
                 "Failed to delete intake discussion for pr {}: {e}",
                 discussion.pr_id
             );
-            Some("Failed to delete intake discussion.")
+            HandledError::UserfacingError("Failed to delete intake discussion.".into())
         })?;
 
         Ok(())
@@ -225,23 +228,12 @@ pub async fn start_review_task(
     )
     .await
     {
-        Err(Some(e)) => {
+        Err(e) => {
             let _ = interaction
                 .create_response(
                     &ctx,
                     CreateInteractionResponse::Message(
                         CreateInteractionResponseMessage::new().content(format!("Error: {e}")),
-                    ),
-                )
-                .await;
-        }
-        Err(None) => {
-            let _ = interaction
-                .create_response(
-                    &ctx,
-                    CreateInteractionResponse::Message(
-                        CreateInteractionResponseMessage::new()
-                            .content(format!("An internal error occurred.")),
                     ),
                 )
                 .await;
@@ -265,12 +257,15 @@ pub async fn no_review_needed_task(
         db: Pool<Sqlite>,
         gh: Arc<GitHub>,
         intake_thread: ChannelId,
-    ) -> Result<(), &'static str> {
-        let no_review_needed_label = Config::get_no_review_needed_label(&db)
-            .await
-            .ok_or("Can't process No Review Needed with GitHub label unset.")?;
+    ) -> Result<(), HandledError> {
+        let no_review_needed_label =
+            Config::get_no_review_needed_label(&db)
+                .await
+                .ok_or(HandledError::UserfacingError(
+                    "Can't process No Review Needed with GitHub label unset.".into(),
+                ))?;
 
-        discussion.delete(&db).await.map_err(|()| "Failed to delete discussion from DB. Can't process no review needed press further.")?;
+        discussion.delete(&db).await?;
 
         gh.octo_install
             .issues(&gh.repo_owner, &gh.repo_name)
@@ -281,7 +276,7 @@ pub async fn no_review_needed_task(
                     "Failed to set no review needed label on PR #{}: {e}",
                     discussion.pr_id
                 );
-                "Failed to set GitHub label."
+                HandledError::UserfacingError("Failed to set GitHub label.".into())
             })?;
 
         gh.octo_install
@@ -299,7 +294,7 @@ pub async fn no_review_needed_task(
                     "Failed to create no review needed comment on PR #{}: {e}",
                     discussion.pr_id
                 );
-                "Failed to create GitHub comment."
+                HandledError::UserfacingError("Failed to create GitHub comment.".into())
             })?;
 
         intake_thread.delete(&ctx).await.map_err(|e| {
@@ -307,7 +302,7 @@ pub async fn no_review_needed_task(
                 "Failed to delete intake discussion for PR #{}: {e}",
                 discussion.pr_id
             );
-            "Failed to delete intake discussion."
+            HandledError::UserfacingError("Failed to delete intake discussion.".into())
         })?;
 
         Ok(())
