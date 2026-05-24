@@ -262,6 +262,104 @@ impl Config {
         row.gh_label_no_review
     }
 
+    pub async fn get_approved_label(db: &Pool<Sqlite>) -> Option<String> {
+        let row = match sqlx::query!(
+            r#"
+            SELECT gh_label_cr_approved
+            FROM cr_config
+            WHERE ID = 1
+            "#,
+        )
+        .fetch_optional(db)
+        .await
+        {
+            Ok(Some(x)) => x,
+            Ok(None) => {
+                warn!("Missing config row.");
+                return None;
+            }
+            Err(e) => {
+                error!("Failed to fetch approved label: {e}");
+                return None;
+            }
+        };
+
+        row.gh_label_cr_approved
+    }
+
+    pub async fn set_approved_label(db: &Pool<Sqlite>, label: String) -> Result<(), HandledError> {
+        match sqlx::query!(
+            r#"
+            INSERT INTO cr_config (id, gh_label_cr_approved)
+            VALUES(1, ?1)
+            ON CONFLICT(id)
+            DO UPDATE SET gh_label_cr_approved=excluded.gh_label_cr_approved;
+            "#,
+            label
+        )
+        .execute(db)
+        .await
+        {
+            Ok(_) => {
+                info!("CR approved label set to '{label}'.");
+                return Ok(());
+            }
+            Err(e) => {
+                error!("Failed to set approved label: {e}");
+                return Err(HandledError::InternalError);
+            }
+        };
+    }
+
+    pub async fn get_denied_label(db: &Pool<Sqlite>) -> Option<String> {
+        let row = match sqlx::query!(
+            r#"
+            SELECT gh_label_cr_denied
+            FROM cr_config
+            WHERE ID = 1
+            "#,
+        )
+        .fetch_optional(db)
+        .await
+        {
+            Ok(Some(x)) => x,
+            Ok(None) => {
+                warn!("Missing config row.");
+                return None;
+            }
+            Err(e) => {
+                error!("Failed to fetch CR denied label: {e}");
+                return None;
+            }
+        };
+
+        row.gh_label_cr_denied
+    }
+
+    pub async fn set_denied_label(db: &Pool<Sqlite>, label: String) -> Result<(), HandledError> {
+        match sqlx::query!(
+            r#"
+            INSERT INTO cr_config (id, gh_label_cr_denied)
+            VALUES(1, ?1)
+            ON CONFLICT(id)
+            DO UPDATE SET gh_label_cr_denied=excluded.gh_label_cr_denied;
+            "#,
+            label
+        )
+        .execute(db)
+        .await
+        {
+            Ok(_) => {
+                info!("CR Denied label set to '{label}'.");
+                return Ok(());
+            }
+            Err(e) => {
+                error!("Failed to set CR denied label: {e}");
+                return Err(HandledError::InternalError);
+            }
+        };
+    }
+
     pub async fn get_review_ping_role(db: &Pool<Sqlite>) -> Option<RoleId> {
         let row = match sqlx::query!("SELECT review_ping_role FROM cr_config WHERE id = 1")
             .fetch_optional(db)

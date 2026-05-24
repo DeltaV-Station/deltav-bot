@@ -1,5 +1,8 @@
-use poise::serenity_prelude::{
-    ChannelId, CreateEmbed, CreateEmbedFooter, ForumTagId, GuildChannel, RoleId,
+use poise::{
+    ChoiceParameter,
+    serenity_prelude::{
+        ChannelId, CreateEmbed, CreateEmbedFooter, EditThread, ForumTagId, GuildChannel, RoleId,
+    },
 };
 use tracing::error;
 
@@ -8,8 +11,10 @@ use crate::{
         Context, EMBED_DESC_MAX_LEN, Error,
         content_review::data::{
             config::Config,
+            discussions::DiscussionRecord,
             forums::{ForumRecord, delete_forum_by_channel},
         },
+        permissions::{check_permissions, data::PermissionFlags},
     },
     github::GitHub,
 };
@@ -33,6 +38,16 @@ pub enum HandledError {
     InternalError,
 }
 
+#[derive(ChoiceParameter)]
+pub enum CrOutcome {
+    #[name = "Test-Merge"]
+    TestMerge,
+    #[name = "Approved"]
+    Approved,
+    #[name = "Denied"]
+    Denied,
+}
+
 async fn discussion_channel_to_guild(
     pr_id: u64,
     id: ChannelId,
@@ -54,15 +69,143 @@ async fn discussion_channel_to_guild(
     guild_channel
 }
 
-#[poise::command(slash_command, subcommands("cr_forum", "cr_config", "cr_review"))]
+#[poise::command(slash_command, subcommands("cr_forum", "cr_config", "cr_complete"))]
 pub async fn cr(_ctx: Context<'_>) -> Result<(), Error> {
     // dummy command
     Ok(())
 }
 
-#[poise::command(slash_command, rename = "review")]
-pub async fn cr_review(_ctx: Context<'_>) -> Result<(), Error> {
-    // dummy command
+#[poise::command(slash_command, rename = "complete", ephemeral)]
+pub async fn cr_complete(
+    ctx: Context<'_>,
+    outcome: CrOutcome,
+    comment: Option<String>,
+) -> Result<(), Error> {
+    if !check_permissions(&ctx, PermissionFlags::CONTENT_REVIEWER).await? {
+        return Ok(());
+    }
+
+    let Some(discussion) = DiscussionRecord::get_by_thread(&ctx.data().db, ctx.channel_id()).await
+    else {
+        ctx.reply("There is no PR associated with this thread.")
+            .await?;
+        return Ok(());
+    };
+
+    let Some(under_review_label) = Config::get_under_review_label(&ctx.data().db).await else {
+        ctx.reply("Can't close with unset Under Review label.")
+            .await?;
+        return Ok(());
+    };
+
+    let gh = &ctx.data().gh;
+    match outcome {
+        CrOutcome::Approved | CrOutcome::TestMerge => {
+            let Some(approved_label) = Config::get_approved_label(&ctx.data().db).await else {
+                ctx.reply("Can't close with unset CR Approved label.")
+                    .await?;
+                return Ok(());
+            };
+
+            if let Err(e) = gh
+                .octo_install
+                .issues(&gh.repo_owner, &gh.repo_name)
+                .add_labels(discussion.pr_id, &[approved_label])
+                .await
+            {
+                error!(
+                    "Failed to set CR Approved label on PR #{}: {e}",
+                    discussion.pr_id
+                );
+
+                ctx.reply("Failed to add CR Approved GitHub label.").await?;
+                return Ok(());
+            };
+        }
+        CrOutcome::Denied => {
+            let Some(denied_label) = Config::get_denied_label(&ctx.data().db).await else {
+                ctx.reply("Can't close with unset CR Denied label.").await?;
+                return Ok(());
+            };
+
+            if let Err(e) = gh
+                .octo_install
+                .issues(&gh.repo_owner, &gh.repo_name)
+                .add_labels(discussion.pr_id, &[denied_label])
+                .await
+            {
+                error!(
+                    "Failed to set CR Denied label on PR #{}: {e}",
+                    discussion.pr_id
+                );
+
+                ctx.reply("Failed to add CR Denied GitHub label.").await?;
+                return Ok(());
+            };
+        }
+    }
+
+    if let Err(e) = gh
+        .octo_install
+        .issues(&gh.repo_owner, &gh.repo_name)
+        .remove_label(discussion.pr_id, &under_review_label)
+        .await
+    {
+        error!(
+            "Failed to remove Under Review label from PR #{}: {e}",
+            discussion.pr_id
+        );
+
+        ctx.reply("Failed to remove Under Review GitHub label.")
+            .await?;
+        return Ok(());
+    };
+
+    if let Err(e) = gh
+        .octo_install
+        .issues(&gh.repo_owner, &gh.repo_name)
+        .create_comment(
+            discussion.pr_id,
+            format!(
+                "**CR consensus: {}**\n{}\n*Review closed by {}*",
+                outcome.name(),
+                comment.unwrap_or("No comment.".into()),
+                ctx.author().name
+            ),
+        )
+        .await
+    {
+        error!(
+            "Failed to create CR outcome comment on PR #{}: {e}",
+            discussion.pr_id
+        );
+
+        ctx.reply("Failed to create GitHub comment.").await?;
+        return Ok(());
+    };
+
+    ctx.defer().await?;
+
+    ctx.reply(format!(
+        "This discussion has been closed: **{}**.",
+        outcome.name()
+    ))
+    .await?;
+
+    if let Some(mut channel) = ctx.guild_channel().await {
+        if let Err(e) = channel
+            .edit_thread(&ctx, EditThread::new().archived(true))
+            .await
+        {
+            error!(
+                "Failed to close thread for PR#{} ({}): {e}",
+                discussion.pr_id, channel.id
+            );
+            ctx.reply("Failed to archive thread. Lacking permissions.")
+                .await?;
+        }
+    }
+
     Ok(())
 }
 
@@ -77,17 +220,21 @@ pub async fn cr_forum(_ctx: Context<'_>) -> Result<(), Error> {
 }
 
 /// Set config values for the Content Review module
-#[poise::command(slash_command, rename = "config")]
+#[poise::command(slash_command, rename = "config", ephemeral)]
 pub async fn cr_config(
     ctx: Context<'_>,
     intake_cr_forum: Option<ChannelId>,
     public_cr_forum: Option<ChannelId>,
     private_cr_forum: Option<ChannelId>,
+    gh_label_approved: Option<String>,
+    gh_label_denied: Option<String>,
     gh_label_no_review: Option<String>,
     gh_label_under_review: Option<String>,
     review_ping_role: Option<RoleId>,
 ) -> Result<(), Error> {
-    ctx.defer_ephemeral().await?;
+    if !check_permissions(&ctx, PermissionFlags::CONTENT_REVIEW_CONFIG).await? {
+        return Ok(());
+    }
 
     if let Some(intake_cr_forum) = intake_cr_forum {
         if let Err(e) = Config::set_intake_forum(&ctx.data().db, Some(intake_cr_forum)).await {
@@ -129,6 +276,20 @@ pub async fn cr_config(
         }
     }
 
+    if let Some(approved_label) = gh_label_approved {
+        if let Err(e) = Config::set_approved_label(&ctx.data().db, approved_label).await {
+            ctx.reply(format!("Error: {e}")).await?;
+            return Ok(());
+        }
+    }
+
+    if let Some(denied_label) = gh_label_denied {
+        if let Err(e) = Config::set_denied_label(&ctx.data().db, denied_label).await {
+            ctx.reply(format!("Error: {e}")).await?;
+            return Ok(());
+        }
+    }
+
     if let Some(review_ping_role) = review_ping_role {
         if let Err(e) = Config::set_review_ping_role(&ctx.data().db, Some(review_ping_role)).await {
             ctx.reply(format!("Error: {e}")).await?;
@@ -141,7 +302,7 @@ pub async fn cr_config(
 }
 
 /// Add or update a direction forum
-#[poise::command(slash_command, rename = "upsert")]
+#[poise::command(slash_command, rename = "upsert", ephemeral)]
 pub async fn cr_forum_upsert(
     ctx: Context<'_>,
     forum: ChannelId,
@@ -152,7 +313,9 @@ pub async fn cr_forum_upsert(
     tag_closed: ForumTagId,
     tag_merged: ForumTagId,
 ) -> Result<(), Error> {
-    ctx.defer_ephemeral().await?;
+    if !check_permissions(&ctx, PermissionFlags::CONTENT_REVIEW_CONFIG).await? {
+        return Ok(());
+    }
 
     let record = ForumRecord {
         channel_id: forum,
@@ -177,9 +340,11 @@ pub async fn cr_forum_upsert(
 }
 
 // Delete a direction forum record (this does not delete the actual channel)
-#[poise::command(slash_command, rename = "delete")]
+#[poise::command(slash_command, rename = "delete", ephemeral)]
 pub async fn cr_forum_delete(ctx: Context<'_>, forum: ChannelId) -> Result<(), Error> {
-    ctx.defer_ephemeral().await?;
+    if !check_permissions(&ctx, PermissionFlags::CONTENT_REVIEW_CONFIG).await? {
+        return Ok(());
+    }
 
     match delete_forum_by_channel(&ctx.data().db, forum).await {
         Ok(_) => {
