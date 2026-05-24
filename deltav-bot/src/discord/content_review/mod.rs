@@ -201,7 +201,7 @@ pub async fn cr_complete(
         .create_comment(
             discussion.pr_id,
             format!(
-                "**CR consensus: {}**\n{}\n*Review closed by {}*",
+                "**CR consensus: {}**\n```\n{}\n```\nReview closed by {}.",
                 outcome.name(),
                 comment.unwrap_or("No comment.".into()),
                 ctx.author().name
