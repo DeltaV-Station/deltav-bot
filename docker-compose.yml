@@ -1,0 +1,19 @@
+version: "3"
+
+services:
+  deltav-bot:
+    image: ghcr.io/DisposableCrewmember42/deltav-bot
+    environment:
+      WEBHOOK_PORT: 8080
+      WEBHOOK_SECRET: "verysecurekey"
+      GH_APP_ID: 12345
+      GH_APP_KEY: "rsa key in ascii armored format"
+      GH_REPO_OWNER: "DeltaV-Station"
+      GH_REPO_NAME: "Delta-v"
+      DISCORD_TOKEN: "verysecuretoken"
+      DISCORD_OPERATOR_USERID: 1234512345
+      DATABASE_URL: "sqlite:/data/db.sqlite3"
+    # Alternatively, use an env file
+    # env_file: example.env
+    volumes:
+      - deltav-bot-data:/data
