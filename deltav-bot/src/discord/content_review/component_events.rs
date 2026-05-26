@@ -130,8 +130,9 @@ pub async fn start_review_task(
             .checked_add_days(Days::new(review_time_days))
             .ok_or(HandledError::InternalError)?;
 
-        gh.octo_install
-            .issues(&gh.repo_owner, &gh.repo_name)
+        let issues = gh.octo_install.issues_by_id(gh.repo);
+
+        issues
             .add_labels(discussion.pr_id, &[under_review_label])
             .await
             .map_err(|e| {
@@ -145,9 +146,7 @@ pub async fn start_review_task(
                 );
             })?;
 
-        gh
-            .octo_install
-            .issues(&gh.repo_owner, &gh.repo_name)
+        issues
             .create_comment(discussion.pr_id, format!(
                 "**Triaged by {}:**\nThis PR requires a content review discussion, which will be held in {}.\n{}{}",
                 interaction.user.name,
@@ -268,8 +267,9 @@ pub async fn no_review_needed_task(
 
         discussion.delete(&db).await?;
 
-        gh.octo_install
-            .issues(&gh.repo_owner, &gh.repo_name)
+        let issues = gh.octo_install.issues_by_id(gh.repo);
+
+        issues
             .add_labels(discussion.pr_id, &[no_review_needed_label])
             .await
             .map_err(|e| {
@@ -280,8 +280,7 @@ pub async fn no_review_needed_task(
                 HandledError::UserfacingError("Failed to set GitHub label.".into())
             })?;
 
-        gh.octo_install
-            .issues(&gh.repo_owner, &gh.repo_name)
+        issues
             .create_comment(
                 discussion.pr_id,
                 format!(

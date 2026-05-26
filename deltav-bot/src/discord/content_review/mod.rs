@@ -267,6 +267,7 @@ pub async fn cr_complete(
 
     let gh = &ctx.data().gh;
     let config = &ctx.data().cr_config;
+    let issues = gh.octo_install.issues_by_id(gh.repo);
     match outcome {
         CrOutcome::Approved | CrOutcome::TestMerge => {
             let Some(approved_label) = config.get_approved_label().await else {
@@ -277,12 +278,7 @@ pub async fn cr_complete(
 
             ctx.defer().await?;
 
-            if let Err(e) = gh
-                .octo_install
-                .issues(&gh.repo_owner, &gh.repo_name)
-                .add_labels(discussion.pr_id, &[approved_label])
-                .await
-            {
+            if let Err(e) = issues.add_labels(discussion.pr_id, &[approved_label]).await {
                 error!(
                     "Failed to set CR Approved label on PR #{}: {e}",
                     discussion.pr_id
@@ -300,12 +296,7 @@ pub async fn cr_complete(
 
             ctx.defer().await?;
 
-            if let Err(e) = gh
-                .octo_install
-                .issues(&gh.repo_owner, &gh.repo_name)
-                .add_labels(discussion.pr_id, &[denied_label])
-                .await
-            {
+            if let Err(e) = issues.add_labels(discussion.pr_id, &[denied_label]).await {
                 error!(
                     "Failed to set CR Denied label on PR #{}: {e}",
                     discussion.pr_id
@@ -336,9 +327,7 @@ pub async fn cr_complete(
             .await?;
     }
 
-    if let Err(e) = gh
-        .octo_install
-        .issues(&gh.repo_owner, &gh.repo_name)
+    if let Err(e) = issues
         .remove_label(discussion.pr_id, &under_review_label)
         .await
     {
@@ -352,9 +341,7 @@ pub async fn cr_complete(
         return Ok(());
     };
 
-    if let Err(e) = gh
-        .octo_install
-        .issues(&gh.repo_owner, &gh.repo_name)
+    if let Err(e) = issues
         .create_comment(
             discussion.pr_id,
             format!(
