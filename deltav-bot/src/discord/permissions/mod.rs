@@ -54,11 +54,12 @@ pub async fn perms(_ctx: Context<'_>) -> Result<(), Error> {
     Ok(())
 }
 
+/// Display the list of flags granted to a user or a role
 #[poise::command(slash_command, rename = "get", ephemeral)]
 pub async fn perms_get(
     ctx: Context<'_>,
-    user: Option<UserId>,
-    role: Option<RoleId>,
+    #[description = "User to check"] user: Option<UserId>,
+    #[description = "Role to check"] role: Option<RoleId>,
 ) -> Result<(), Error> {
     if !check_permissions_command(&ctx, PermissionFlags::PERMISSIONS_VIEW).await? {
         return Ok(());
@@ -88,12 +89,13 @@ pub async fn perms_get(
     Ok(())
 }
 
+/// Grant a flag to a user or a role
 #[poise::command(slash_command, rename = "add", ephemeral)]
 pub async fn perms_add(
     ctx: Context<'_>,
-    user: Option<UserId>,
-    role: Option<RoleId>,
-    permission: PermissionFlags,
+    #[description = "The target user"] user: Option<UserId>,
+    #[description = "The target role"] role: Option<RoleId>,
+    #[description = "The flag you want to grant"] permission: PermissionFlags,
 ) -> Result<(), Error> {
     if !check_permissions_command(&ctx, PermissionFlags::PERMISSIONS_EDIT).await? {
         return Ok(());
@@ -127,12 +129,13 @@ pub async fn perms_add(
     Ok(())
 }
 
+/// Remove a flag from a user or a role
 #[poise::command(slash_command, rename = "remove", ephemeral)]
 pub async fn perms_remove(
     ctx: Context<'_>,
-    user: Option<UserId>,
-    role: Option<RoleId>,
-    permission: PermissionFlags,
+    #[description = "The target user"] user: Option<UserId>,
+    #[description = "The target role"] role: Option<RoleId>,
+    #[description = "The flag you want to remove"] permission: PermissionFlags,
 ) -> Result<(), Error> {
     if !check_permissions_command(&ctx, PermissionFlags::PERMISSIONS_EDIT).await? {
         return Ok(());
@@ -167,8 +170,12 @@ pub async fn perms_remove(
     Ok(())
 }
 
+/// Displays a list of all flags this user has been granted either specifically or through roles.
 #[poise::command(slash_command, rename = "breakdown", ephemeral)]
-pub async fn perms_breakdown(ctx: Context<'_>, user: UserId) -> Result<(), Error> {
+pub async fn perms_breakdown(
+    ctx: Context<'_>,
+    #[description = "User to check"] user: UserId,
+) -> Result<(), Error> {
     if !check_permissions_command(&ctx, PermissionFlags::PERMISSIONS_VIEW).await? {
         return Ok(());
     }
