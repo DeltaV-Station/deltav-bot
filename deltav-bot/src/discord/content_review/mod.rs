@@ -148,7 +148,7 @@ pub async fn cr_request_changes(ctx: ApplicationContext<'_>) -> Result<(), Error
     }
 
     ctx.send(CreateReply::default()
-        .ephemeral(false) // Don't know why, I do defer above, but it's ephemeral if unset anyway.
+        .ephemeral(false)
         .embed(CreateEmbed::new()
             .title("Changes requested")
             .description(
