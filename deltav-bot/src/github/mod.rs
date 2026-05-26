@@ -94,7 +94,6 @@ async fn on_webhook_request(
     };
 
     let body: String = body.chars().filter(|c| !c.is_control()).collect(); // remove control characters, serde_json will be angry if there are any
-    let body = HTML_COMMENT_REGEX.replace_all(&body, "").to_string(); // remove HTML comments
 
     let event = match WebhookEvent::try_from_header_and_body(event_header, &body) {
         Ok(x) => x,
@@ -162,7 +161,10 @@ async fn on_webhook_request(
                         .send(GitHubMessage::PrOpened {
                             pr_id: p.number,
                             pr_title: title,
-                            pr_body: p.pull_request.body,
+                            pr_body: p.pull_request.body.and_then(|x| {
+                                // multiple long HTML comments in PR template will clutter the embed
+                                Some(HTML_COMMENT_REGEX.replace_all(&x, "").to_string())
+                            }),
                             opened_by: sender_login,
                         })
                         .await
