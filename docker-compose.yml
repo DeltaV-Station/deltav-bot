@@ -1,8 +1,6 @@
-version: "3"
-
 services:
   deltav-bot:
-    image: ghcr.io/DisposableCrewmember42/deltav-bot
+    image: ghcr.io/disposablecrewmember42/deltav-bot
     environment:
       WEBHOOK_PORT: 8080
       WEBHOOK_SECRET: "verysecurekey"
@@ -17,3 +15,6 @@ services:
     # env_file: example.env
     volumes:
       - deltav-bot-data:/data
+
+volumes:
+  deltav-bot-data:
