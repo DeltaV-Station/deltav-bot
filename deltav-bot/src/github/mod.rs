@@ -11,7 +11,7 @@ use jsonwebtoken::EncodingKey;
 use octocrab::{
     Octocrab, OctocrabBuilder,
     models::{
-        AppId, RepositoryId,
+        AppId, AuthorAssociation, RepositoryId,
         webhook_events::{
             WebhookEvent, WebhookEventPayload,
             payload::{IssueCommentWebhookEventAction, PullRequestWebhookEventAction},
@@ -60,7 +60,7 @@ pub enum GitHubMessage {
         pr_id: u64,
         merged_by: String,
     },
-    AuthorCommented {
+    AuthorOrMaintCommented {
         issue_id: u64,
         username: String,
         comment: String,
@@ -177,9 +177,25 @@ async fn on_webhook_request(
         }
 
         IssueComment(c) => {
-            if c.action != IssueCommentWebhookEventAction::Created
-                || c.comment.user.login != c.issue.user.login
-            {
+            if c.action != IssueCommentWebhookEventAction::Created {
+                return StatusCode::OK;
+            }
+
+            let is_pr_author = c.comment.user.login == c.issue.user.login;
+            let is_maintainer = c
+                .comment
+                .author_association
+                .as_ref()
+                .and_then(|x| {
+                    Some(
+                        *x == AuthorAssociation::Collaborator
+                            || *x == AuthorAssociation::Member
+                            || *x == AuthorAssociation::Owner,
+                    )
+                })
+                .unwrap_or_default();
+
+            if !is_pr_author && !is_maintainer {
                 return StatusCode::OK;
             }
 
@@ -190,7 +206,7 @@ async fn on_webhook_request(
 
             state
                 .sender
-                .send(GitHubMessage::AuthorCommented {
+                .send(GitHubMessage::AuthorOrMaintCommented {
                     issue_id: c.issue.number,
                     username: c.comment.user.login,
                     comment: body,

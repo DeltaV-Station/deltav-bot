@@ -140,7 +140,7 @@ pub async fn cr_github_task(
                 }
             }
 
-            GitHubMessage::AuthorCommented {
+            GitHubMessage::AuthorOrMaintCommented {
                 issue_id,
                 username,
                 comment,
@@ -154,7 +154,7 @@ pub async fn cr_github_task(
                 }
 
                 info!(
-                    "Author {username} of PR {issue_id}, associated with thread {}, wrote a comment.",
+                    "Author or maintainer {username} wrote a comment in PR #{issue_id}, associated with thread {}.",
                     discussion.thread_id.get()
                 );
 
@@ -176,7 +176,7 @@ pub async fn cr_github_task(
                     .await
                 {
                     error!(
-                        "Failed to send author comment for PR #{issue_id} to {}: {e:#?}",
+                        "Failed to relay GitHub comment for PR #{issue_id} to Discord thread {}: {e:#?}",
                         discussion.thread_id
                     );
                 }
