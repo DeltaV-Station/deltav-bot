@@ -47,6 +47,11 @@
         "name": "gh_label_cr_denied",
         "ordinal": 8,
         "type_info": "Text"
+      },
+      {
+        "name": "gh_label_cr_changes_requested",
+        "ordinal": 9,
+        "type_info": "Text"
       }
     ],
     "parameters": {
@@ -54,6 +59,7 @@
     },
     "nullable": [
       false,
+      true,
       true,
       true,
       true,

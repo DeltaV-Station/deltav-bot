@@ -23,6 +23,7 @@ struct ConfigCache {
     ghl_not_needed: Option<String>,
     ghl_approved: Option<String>,
     ghl_denied: Option<String>,
+    ghl_changes_requested: Option<String>,
 
     review_ping_role: Option<RoleId>,
 }
@@ -41,6 +42,7 @@ impl CrConfig {
                     ghl_denied: x.gh_label_cr_denied,
                     ghl_not_needed: x.gh_label_no_review,
                     ghl_under_review: x.gh_label_under_review,
+                    ghl_changes_requested: x.gh_label_cr_changes_requested,
                     intake_forum: x
                         .intake_cr_forum
                         .and_then(|x| Some(ChannelId::new(x.cast_unsigned()))),
@@ -200,6 +202,10 @@ impl CrConfig {
         };
     }
 
+    pub async fn get_no_review_needed_label(&self) -> Option<String> {
+        self.cache.read().await.ghl_not_needed.clone()
+    }
+
     pub async fn get_under_review_label(&self) -> Option<String> {
         self.cache.read().await.ghl_under_review.clone()
     }
@@ -229,8 +235,33 @@ impl CrConfig {
         };
     }
 
-    pub async fn get_no_review_needed_label(&self) -> Option<String> {
-        self.cache.read().await.ghl_not_needed.clone()
+    pub async fn get_changes_requested_label(&self) -> Option<String> {
+        self.cache.read().await.ghl_changes_requested.clone()
+    }
+
+    pub async fn set_changes_requested_label(&self, label: String) -> Result<(), HandledError> {
+        match sqlx::query!(
+            r#"
+                INSERT INTO cr_config (id, gh_label_cr_changes_requested)
+                VALUES(1, ?1)
+                ON CONFLICT(id)
+                DO UPDATE SET gh_label_cr_changes_requested=excluded.gh_label_cr_changes_requested;
+                "#,
+            label
+        )
+        .execute(&self.db)
+        .await
+        {
+            Ok(_) => {
+                info!("Changes requested label set to '{label}'.");
+                self.cache.write().await.ghl_changes_requested = Some(label);
+                return Ok(());
+            }
+            Err(e) => {
+                error!("Failed to set changes requested label: {e}");
+                return Err(HandledError::InternalError);
+            }
+        };
     }
 
     pub async fn get_approved_label(&self) -> Option<String> {

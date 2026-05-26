@@ -11,7 +11,7 @@ use jsonwebtoken::EncodingKey;
 use octocrab::{
     Octocrab, OctocrabBuilder,
     models::{
-        AppId,
+        AppId, RepositoryId,
         webhook_events::{
             WebhookEvent, WebhookEventPayload,
             payload::{IssueCommentWebhookEventAction, PullRequestWebhookEventAction},
@@ -30,11 +30,13 @@ pub struct GhAppConfig {
     pub repo_name: String,
 }
 
+// TODO: Stop using repo_owner and repo_name in calls and use repo with by_id functions instead.
 pub struct GitHub {
     pub octo_app: Octocrab,
     pub octo_install: Octocrab,
     pub repo_owner: String,
     pub repo_name: String,
+    pub repo: RepositoryId,
 }
 
 pub struct WebhookServer {
@@ -270,6 +272,19 @@ impl GitHub {
         .installation(install.id)
         .expect("Successfully authorized as GitHub App before. The installation call only returns an error if cached auth data is missing, this shouldn't be happening.");
 
+        let repo = match octo_install
+            .repos(&app_config.repo_owner, &app_config.repo_name)
+            .get()
+            .await
+        {
+            Ok(x) => x.id,
+            Err(e) => {
+                error!("Failed to get repository ID: {e}");
+                return Err(());
+            }
+        };
+        info!("Got repository ID {repo}.");
+
         info!("Spawning webhook server task.");
         let (sender, receiver) = mpsc::channel(64);
         let handle = tokio::spawn(server_task(webhook_port, webhook_secret, sender));
@@ -284,6 +299,7 @@ impl GitHub {
                 octo_install: octo_install,
                 repo_owner: app_config.repo_owner,
                 repo_name: app_config.repo_name,
+                repo,
             },
         ))
     }

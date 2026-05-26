@@ -1,15 +1,16 @@
 use octocrab::params::pulls;
 use poise::{
-    ChoiceParameter,
+    ChoiceParameter, CreateReply, Modal,
     serenity_prelude::{
-        ChannelId, CreateEmbed, CreateEmbedFooter, EditThread, ForumTagId, GuildChannel, RoleId,
+        ChannelId, CreateEmbed, CreateEmbedAuthor, CreateEmbedFooter, EditThread, ForumTagId,
+        GuildChannel, RoleId,
     },
 };
 use tracing::error;
 
 use crate::{
     discord::{
-        Context, EMBED_DESC_MAX_LEN, Error,
+        ApplicationContext, Context, EMBED_DESC_MAX_LEN, Error,
         content_review::data::{
             discussions::DiscussionRecord,
             forums::{ForumRecord, delete_forum_by_channel},
@@ -50,6 +51,15 @@ pub enum CrOutcome {
     Denied,
 }
 
+#[derive(Debug, Modal)]
+#[name = "Request changes"]
+struct RequestChangesModal {
+    #[name = "What should be changed?"]
+    #[placeholder = "If you prefer writing the comment yourself, leave this field blank to only add the label."]
+    #[paragraph]
+    description: String,
+}
+
 async fn discussion_channel_to_guild(
     pr_id: u64,
     id: ChannelId,
@@ -71,10 +81,168 @@ async fn discussion_channel_to_guild(
     guild_channel
 }
 
-#[poise::command(slash_command, subcommands("cr_forum", "cr_config", "cr_complete"))]
+#[poise::command(
+    slash_command,
+    subcommands("cr_forum", "cr_config", "cr_complete", "cr_request_changes")
+)]
 pub async fn cr(_ctx: Context<'_>) -> Result<(), Error> {
     // dummy command
     Ok(())
+}
+
+#[poise::command(slash_command, rename = "request-changes", ephemeral)]
+pub async fn cr_request_changes(ctx: ApplicationContext<'_>) -> Result<(), Error> {
+    let wrapped_ctx = Context::Application(ctx);
+    if !check_permissions_command(&wrapped_ctx, PermissionFlags::CONTENT_REVIEWER).await? {
+        return Ok(());
+    }
+
+    let (_, mut discussion, _) = match get_channel_discussion(&wrapped_ctx).await {
+        Ok((forum, discussion, channel)) => (forum, discussion, channel),
+        Err(e) => {
+            ctx.reply(format!("Error: {e}")).await?;
+            return Ok(());
+        }
+    };
+
+    let Some(under_review_label) = ctx.data().cr_config.get_under_review_label().await else {
+        ctx.reply("Can't process change request with under review label unset.")
+            .await?;
+        return Ok(());
+    };
+
+    let Some(changes_requested_label) = ctx.data().cr_config.get_changes_requested_label().await
+    else {
+        ctx.reply("Can't process change request with changes requested label unset.")
+            .await?;
+        return Ok(());
+    };
+
+    let Some(response) = RequestChangesModal::execute(ctx).await? else {
+        ctx.reply("Modal timed out.").await?;
+        return Ok(());
+    };
+
+    let issues = ctx.data().gh.octo_install.issues_by_id(ctx.data().gh.repo);
+
+    if !response.description.is_empty() {
+        if let Err(e) = issues
+            .create_comment(
+                discussion.pr_id,
+                format!(
+                    "**Changes requested by CR**\n```\n{}\n```\nSent by {}.",
+                    response.description,
+                    ctx.author().name
+                ),
+            )
+            .await
+        {
+            error!(
+                "Failed to create change request comment on PR #{}: {e:#?}",
+                discussion.pr_id
+            );
+
+            ctx.reply("Failed to create GitHub comment").await?;
+            return Ok(());
+        }
+    }
+
+    if let Err(e) = issues
+        .add_labels(discussion.pr_id, &[changes_requested_label])
+        .await
+    {
+        error!(
+            "Failed to set changes requested label on PR #{}: {e:#?}",
+            discussion.pr_id
+        );
+
+        ctx.reply("Failed to set changes requested label").await?;
+        return Ok(());
+    }
+
+    if let Err(e) = issues
+        .remove_label(discussion.pr_id, under_review_label)
+        .await
+    {
+        let did_label_exist = if let octocrab::Error::GitHub {
+            source,
+            backtrace: _,
+        } = &e
+            && source.status_code == 410
+        {
+            false
+        } else {
+            true
+        };
+
+        if !did_label_exist {
+            error!(
+                "Failed to remove under review label from PR #{}: {e:#?}",
+                discussion.pr_id
+            );
+
+            ctx.reply("Failed to remove under review label").await?;
+            return Ok(());
+        }
+    }
+
+    ctx.defer().await?;
+
+    if let Err(e) = discussion.disable_reminders(&ctx.data().db).await {
+        ctx.reply(format!(
+            "Failed to disable reminders upon change request: {e}"
+        ))
+        .await?;
+        // Don't return here, this is not essential.
+    }
+
+    ctx.send(CreateReply::default()
+        .ephemeral(false) // Don't know why, I do defer above, but it's ephemeral if unset anyway.
+        .embed(CreateEmbed::new()
+            .title("Changes requested")
+            .description(
+                if response.description.is_empty() {
+                    "Description was unset. Label has been applied, please write a comment describing the required changes yourself.".into()
+                } else
+                {
+                    response.description
+                })
+            .footer(CreateEmbedFooter::new(&ctx.author().name))
+        )
+    ).await?;
+
+    Ok(())
+}
+
+async fn get_channel_discussion(
+    ctx: &Context<'_>,
+) -> Result<(ForumRecord, DiscussionRecord, GuildChannel), HandledError> {
+    let Some(channel) = ctx.guild_channel().await else {
+        return Err(HandledError::UserfacingError(
+            "Must be in a guild channel.".into(),
+        ));
+    };
+
+    let Some(parent_channel) = channel.parent_id else {
+        return Err(HandledError::UserfacingError(
+            "Must be in a forum channel.".into(),
+        ));
+    };
+
+    let Some(forum) = ForumRecord::get_by_channel(&ctx.data().db, parent_channel).await else {
+        return Err(HandledError::UserfacingError(
+            "Must be in a registered CR forum.".into(),
+        ));
+    };
+
+    let Some(discussion) = DiscussionRecord::get_by_thread(&ctx.data().db, ctx.channel_id()).await
+    else {
+        return Err(HandledError::UserfacingError(
+            "There is no PR associated with this thread.".into(),
+        ));
+    };
+
+    Ok((forum, discussion, channel))
 }
 
 #[poise::command(slash_command, rename = "complete", ephemeral)]
@@ -87,27 +255,12 @@ pub async fn cr_complete(
         return Ok(());
     }
 
-    let Some(mut channel) = ctx.guild_channel().await else {
-        ctx.reply("Must be in a guild channel.").await?;
-        return Ok(());
-    };
-
-    let Some(parent_channel) = channel.parent_id else {
-        ctx.reply("Must be in a forum channel.").await?;
-        return Ok(());
-    };
-
-    let Some(forum) = ForumRecord::get_by_channel(&ctx.data().db, parent_channel).await else {
-        ctx.reply("Must be in a registered CR forum.").await?;
-        return Ok(());
-    };
-
-    let Some(mut discussion) =
-        DiscussionRecord::get_by_thread(&ctx.data().db, ctx.channel_id()).await
-    else {
-        ctx.reply("There is no PR associated with this thread.")
-            .await?;
-        return Ok(());
+    let (forum, mut discussion, mut channel) = match get_channel_discussion(&ctx).await {
+        Ok((forum, discussion, channel)) => (forum, discussion, channel),
+        Err(e) => {
+            ctx.reply(format!("Error: {e}")).await?;
+            return Ok(());
+        }
     };
 
     let Some(under_review_label) = ctx.data().cr_config.get_under_review_label().await else {
@@ -279,6 +432,7 @@ pub async fn cr_config(
     gh_label_denied: Option<String>,
     gh_label_no_review: Option<String>,
     gh_label_under_review: Option<String>,
+    gh_label_changes_requested: Option<String>,
     review_ping_role: Option<RoleId>,
 ) -> Result<(), Error> {
     if !check_permissions_command(&ctx, PermissionFlags::CONTENT_REVIEW_CONFIG).await? {
@@ -316,35 +470,51 @@ pub async fn cr_config(
             .set_no_review_needed_label(no_review_needed_label)
             .await
         {
-            ctx.reply(format!("Error: {e}")).await?;
+            ctx.reply(format!("Failed to set no review needed label: {e}"))
+                .await?;
             return Ok(());
         }
     }
 
     if let Some(under_review_label) = gh_label_under_review {
         if let Err(e) = config.set_under_review_label(under_review_label).await {
-            ctx.reply(format!("Error: {e}")).await?;
+            ctx.reply(format!("Failed to set under review label: {e}"))
+                .await?;
             return Ok(());
         }
     }
 
     if let Some(approved_label) = gh_label_approved {
         if let Err(e) = config.set_approved_label(approved_label).await {
-            ctx.reply(format!("Error: {e}")).await?;
+            ctx.reply(format!("Failed to set approved label: {e}"))
+                .await?;
             return Ok(());
         }
     }
 
     if let Some(denied_label) = gh_label_denied {
         if let Err(e) = config.set_denied_label(denied_label).await {
-            ctx.reply(format!("Error: {e}")).await?;
+            ctx.reply(format!("Failed to set denied label: {e}"))
+                .await?;
             return Ok(());
         }
     }
 
     if let Some(review_ping_role) = review_ping_role {
         if let Err(e) = config.set_review_ping_role(Some(review_ping_role)).await {
-            ctx.reply(format!("Error: {e}")).await?;
+            ctx.reply(format!("Failed to set review ping role: {e}"))
+                .await?;
+            return Ok(());
+        }
+    }
+
+    if let Some(gh_label_changes_requested) = gh_label_changes_requested {
+        if let Err(e) = config
+            .set_changes_requested_label(gh_label_changes_requested)
+            .await
+        {
+            ctx.reply(format!("Failed to set changes requested label: {e}"))
+                .await?;
             return Ok(());
         }
     }
