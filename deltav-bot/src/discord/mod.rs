@@ -143,3 +143,8 @@ async fn event_handler(
     }
     Ok(())
 }
+
+/// All this does is remove the ` character so reviewers can't close the code block containing their comment
+pub fn sanitize_comment(comment: impl AsRef<str>) -> String {
+    comment.as_ref().replace('`', "")
+}

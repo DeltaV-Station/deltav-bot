@@ -15,6 +15,7 @@ use crate::{
             forums::{ForumRecord, delete_forum_by_channel},
         },
         permissions::{check_permissions_command, data::PermissionFlags},
+        sanitize_comment,
     },
     github::GitHub,
 };
@@ -130,7 +131,7 @@ pub async fn cr_request_changes(ctx: ApplicationContext<'_>) -> Result<(), Error
                 discussion.pr_id,
                 format!(
                     "**Changes requested by CR**\n```\n{}\n```\nSent by {}.",
-                    response.description,
+                    sanitize_comment(&response.description),
                     ctx.author().name
                 ),
             )
@@ -347,7 +348,7 @@ pub async fn cr_complete(
             format!(
                 "**CR consensus: {}**\n```\n{}\n```\nReview closed by {}.",
                 outcome.name(),
-                comment.unwrap_or("No comment.".into()),
+                sanitize_comment(comment.unwrap_or("No comment.".into())),
                 ctx.author().name
             ),
         )

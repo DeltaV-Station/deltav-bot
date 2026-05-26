@@ -25,6 +25,7 @@ use crate::{
             check_permissions_component,
             data::{PermissionFlags, Permissions},
         },
+        sanitize_comment,
     },
     github::GitHub,
 };
@@ -152,7 +153,7 @@ pub async fn start_review_task(
                 interaction.user.name,
                 if private { "private" } else { "public" },
                 if let Some(reasoning) = review_settings.reasoning {
-                    format!("```\n{reasoning}\n```\n")
+                    format!("```\n{}\n```\n", sanitize_comment(reasoning))
                 } else
                 {
                     String::new()
