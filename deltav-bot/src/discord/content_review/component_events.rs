@@ -10,7 +10,7 @@ use poise::{
     },
 };
 use sqlx::{Pool, Sqlite};
-use tracing::error;
+use tracing::{error, info};
 
 use crate::{
     discord::{
@@ -511,14 +511,18 @@ async fn mute_reminders_task(
 ) {
     match discussion.disable_reminders(&db).await {
         Ok(()) => {
+            let message = format!(
+                "{} disabled reminders for PR #{}.",
+                interaction.user.name, discussion.pr_id
+            );
+
+            info!(message);
+
             let _ = interaction
                 .create_response(
                     &ctx,
                     CreateInteractionResponse::Message(
-                        CreateInteractionResponseMessage::new().content(format!(
-                            "Successfully disabled reminders for PR #{}.",
-                            discussion.pr_id
-                        )),
+                        CreateInteractionResponseMessage::new().content(message),
                     ),
                 )
                 .await;
