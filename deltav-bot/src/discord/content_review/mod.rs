@@ -2,8 +2,7 @@ use octocrab::params::pulls;
 use poise::{
     ChoiceParameter, CreateReply, Modal,
     serenity_prelude::{
-        ChannelId, CreateEmbed, CreateEmbedAuthor, CreateEmbedFooter, EditThread, ForumTagId,
-        GuildChannel, RoleId,
+        ChannelId, CreateEmbed, CreateEmbedFooter, EditThread, ForumTagId, GuildChannel, RoleId,
     },
 };
 use tracing::error;
