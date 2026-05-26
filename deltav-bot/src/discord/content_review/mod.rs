@@ -90,6 +90,7 @@ pub async fn cr(_ctx: Context<'_>) -> Result<(), Error> {
     Ok(())
 }
 
+/// Request changes from the author. This command will open a pop-up with a text field for your request.
 #[poise::command(slash_command, rename = "request-changes", ephemeral)]
 pub async fn cr_request_changes(ctx: ApplicationContext<'_>) -> Result<(), Error> {
     let wrapped_ctx = Context::Application(ctx);
@@ -242,11 +243,12 @@ async fn get_channel_discussion(
     Ok((forum, discussion, channel))
 }
 
+/// Determine the outcome of the review, apply labels and notify the author.
 #[poise::command(slash_command, rename = "complete", ephemeral)]
 pub async fn cr_complete(
     ctx: Context<'_>,
-    outcome: CrOutcome,
-    comment: Option<String>,
+    #[description = "The outcome of the review"] outcome: CrOutcome,
+    #[description = "Anything you want the author to know?"] comment: Option<String>,
 ) -> Result<(), Error> {
     if !check_permissions_command(&ctx, PermissionFlags::CONTENT_REVIEWER).await? {
         return Ok(());
@@ -409,14 +411,21 @@ pub async fn cr_forum(_ctx: Context<'_>) -> Result<(), Error> {
 #[poise::command(slash_command, rename = "config", ephemeral)]
 pub async fn cr_config(
     ctx: Context<'_>,
-    intake_cr_forum: Option<ChannelId>,
-    public_cr_forum: Option<ChannelId>,
-    private_cr_forum: Option<ChannelId>,
-    gh_label_approved: Option<String>,
+    #[description = "The intake forum channel, where PRs are triaged"] intake_cr_forum: Option<
+        ChannelId,
+    >,
+    #[description = "The public PR review forum channel"] public_cr_forum: Option<ChannelId>,
+    #[description = "The private PR review forum channel"] private_cr_forum: Option<ChannelId>,
+    #[description = "The full name of the GitHub label applied to approved PRs."] gh_label_approved: Option<String>,
+    #[description = "The full name of the GitHub label applied to denied PRs."]
     gh_label_denied: Option<String>,
+    #[description = "The full name of the GitHub label applied to PRs that don't need a review."]
     gh_label_no_review: Option<String>,
+    #[description = "The full name of the GitHub label applied to PRs that are under review."]
     gh_label_under_review: Option<String>,
+    #[description = "The full name of the GitHub label applied to PRs that require changes."]
     gh_label_changes_requested: Option<String>,
+    #[description = "The content reviewer role, will get pinged for new reviews and review reminders."]
     review_ping_role: Option<RoleId>,
 ) -> Result<(), Error> {
     if !check_permissions_command(&ctx, PermissionFlags::CONTENT_REVIEW_CONFIG).await? {
@@ -511,13 +520,15 @@ pub async fn cr_config(
 #[poise::command(slash_command, rename = "upsert", ephemeral)]
 pub async fn cr_forum_upsert(
     ctx: Context<'_>,
-    forum: ChannelId,
-    private: bool,
-    tag_approved: ForumTagId,
-    tag_denied: ForumTagId,
+    #[description = "The forum channel"] forum: ChannelId,
+    #[description = "Whether the forum is private"] private: bool,
+    #[description = "The ID of the forum tag for approved PRs"] tag_approved: ForumTagId,
+    #[description = "The ID of the forum tag for denied PRs"] tag_denied: ForumTagId,
+    #[description = "The ID of the forum tag for PRs approved for a test-merge"]
     tag_test_merge: ForumTagId,
+    #[description = "The ID of the forum tag for PRs that have been closed on GitHub"]
     tag_closed: ForumTagId,
-    tag_merged: ForumTagId,
+    #[description = "The ID of the forum tag for PRs that have been merged"] tag_merged: ForumTagId,
 ) -> Result<(), Error> {
     if !check_permissions_command(&ctx, PermissionFlags::CONTENT_REVIEW_CONFIG).await? {
         return Ok(());
@@ -547,7 +558,10 @@ pub async fn cr_forum_upsert(
 
 // Delete a direction forum record (this does not delete the actual channel)
 #[poise::command(slash_command, rename = "delete", ephemeral)]
-pub async fn cr_forum_delete(ctx: Context<'_>, forum: ChannelId) -> Result<(), Error> {
+pub async fn cr_forum_delete(
+    ctx: Context<'_>,
+    #[description = "The forum channel"] forum: ChannelId,
+) -> Result<(), Error> {
     if !check_permissions_command(&ctx, PermissionFlags::CONTENT_REVIEW_CONFIG).await? {
         return Ok(());
     }
