@@ -147,6 +147,21 @@ pub async fn cr_request_changes(ctx: ApplicationContext<'_>) -> Result<(), Error
         }
     }
 
+    ctx.send(CreateReply::default()
+        .ephemeral(false) // Don't know why, I do defer above, but it's ephemeral if unset anyway.
+        .embed(CreateEmbed::new()
+            .title("Changes requested")
+            .description(
+                if response.description.is_empty() {
+                    "Description was unset. Label has been applied, please write a comment describing the required changes yourself.".into()
+                } else
+                {
+                    response.description
+                })
+            .footer(CreateEmbedFooter::new(&ctx.author().name))
+        )
+    ).await?;
+
     if let Err(e) = issues
         .add_labels(discussion.pr_id, &[changes_requested_label])
         .await
@@ -186,30 +201,12 @@ pub async fn cr_request_changes(ctx: ApplicationContext<'_>) -> Result<(), Error
         }
     }
 
-    ctx.defer().await?;
-
     if let Err(e) = discussion.disable_reminders(&ctx.data().db).await {
         ctx.reply(format!(
             "Failed to disable reminders upon change request: {e}"
         ))
         .await?;
-        // Don't return here, this is not essential.
     }
-
-    ctx.send(CreateReply::default()
-        .ephemeral(false) // Don't know why, I do defer above, but it's ephemeral if unset anyway.
-        .embed(CreateEmbed::new()
-            .title("Changes requested")
-            .description(
-                if response.description.is_empty() {
-                    "Description was unset. Label has been applied, please write a comment describing the required changes yourself.".into()
-                } else
-                {
-                    response.description
-                })
-            .footer(CreateEmbedFooter::new(&ctx.author().name))
-        )
-    ).await?;
 
     Ok(())
 }
