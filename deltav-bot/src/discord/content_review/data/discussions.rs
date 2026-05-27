@@ -91,6 +91,22 @@ impl DiscussionRecord {
         Ok(())
     }
 
+    pub async fn delete_body(&self, db: &Pool<Sqlite>) -> Result<(), HandledError> {
+        let pr_id_s = self.pr_id.cast_signed();
+        if let Err(e) = sqlx::query!(
+            "UPDATE cr_discussions SET pr_body = NULL WHERE pr_id = ?1",
+            pr_id_s
+        )
+        .execute(db)
+        .await
+        {
+            error!("Failed to null PR body for pr #{}: {e}", self.pr_id);
+            return Err(HandledError::InternalError);
+        }
+
+        Ok(())
+    }
+
     pub async fn get_by_pr(db: &Pool<Sqlite>, pr_id: u64) -> Option<DiscussionRecord> {
         let pr_id_s = pr_id.cast_signed();
         match sqlx::query!("SELECT * FROM cr_discussions WHERE pr_id = ?1", pr_id_s)

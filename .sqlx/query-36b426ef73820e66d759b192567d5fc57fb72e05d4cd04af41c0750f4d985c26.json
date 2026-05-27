@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE cr_discussions SET pr_body = NULL WHERE pr_id = ?1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "36b426ef73820e66d759b192567d5fc57fb72e05d4cd04af41c0750f4d985c26"
+}
