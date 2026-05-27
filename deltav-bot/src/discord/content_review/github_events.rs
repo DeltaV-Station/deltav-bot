@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use poise::serenity_prelude::{
-    CreateActionRow, CreateButton, CreateEmbed, CreateEmbedAuthor, CreateForumPost, CreateMessage,
-    EditThread,
+    CreateActionRow, CreateAllowedMentions, CreateButton, CreateEmbed, CreateEmbedAuthor,
+    CreateForumPost, CreateMessage, EditThread, Mentionable,
 };
 use sqlx::{Pool, Sqlite};
 use tokio::sync::{Mutex, mpsc::Receiver};
@@ -11,14 +11,13 @@ use tracing::{error, info, warn};
 use crate::{
     discord::{
         EMBED_DESC_MAX_LEN,
-        content_review::data::{
-            config::CrConfig, discussions::DiscussionRecord, forums::ForumRecord,
-        },
         content_review::{
             BUTTON_ID_ACTION_NOT_NEEDED, BUTTON_ID_ACTION_START_PRIVATE,
             BUTTON_ID_ACTION_START_PUBLIC, INTERACTION_ID_PREFIX, create_pr_embed,
+            data::{config::CrConfig, discussions::DiscussionRecord, forums::ForumRecord},
             discussion_channel_to_guild,
         },
+        pr_feeds::data::PrFeeds,
     },
     github::{GitHub, GitHubMessage},
 };
@@ -31,6 +30,7 @@ pub async fn cr_github_task(
     db: Pool<Sqlite>,
     gh: Arc<GitHub>,
     config: CrConfig,
+    pr_feeds: PrFeeds,
 ) {
     while let Some(message) = receiver.lock().await.recv().await {
         match message {
@@ -282,6 +282,45 @@ pub async fn cr_github_task(
                     error!(
                         "Failed to add merged tag to {:?}: {e:#?}",
                         discussion.thread_id
+                    );
+                }
+            }
+
+            GitHubMessage::PrLabeled { pr_id, label } => {
+                info!("PRLabeled received: {label}");
+                let Some(feed) = pr_feeds.get_by_label(&label).await else {
+                    continue;
+                };
+
+                let issue = match gh.octo_install.issues_by_id(gh.repo).get(pr_id).await {
+                    Ok(x) => x,
+                    Err(e) => {
+                        error!(
+                            "Failed to fetch issue metadata to post about PR #{pr_id} in PrFeed {}: {e:#?}",
+                            feed.id
+                        );
+                        continue;
+                    }
+                };
+
+                let mut message = CreateMessage::new().embed(create_pr_embed(
+                    pr_id,
+                    issue.title,
+                    issue.user.login,
+                    issue.body,
+                    &gh,
+                ));
+
+                if let Some(ping_role) = feed.ping_role {
+                    message = message
+                        .content(ping_role.mention().to_string())
+                        .allowed_mentions(CreateAllowedMentions::new().roles(&[ping_role]));
+                }
+
+                if let Err(e) = feed.channel_id.send_message(&ctx, message).await {
+                    error!(
+                        "Failed to send PR feed for PR #{pr_id} message to channel {}: {e}",
+                        feed.channel_id
                     );
                 }
             }

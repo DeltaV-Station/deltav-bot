@@ -18,12 +18,14 @@ use crate::{
             data::{PermissionFlags, Permissions},
             perms,
         },
+        pr_feeds::{data::PrFeeds, pr_feeds},
     },
     github::{GitHub, GitHubMessage},
 };
 
 mod content_review;
 mod permissions;
+mod pr_feeds;
 
 const EMBED_DESC_MAX_LEN: usize = 4096;
 
@@ -34,6 +36,7 @@ struct Data {
     // TODO: need to use the receiver in the event handler, which receives a read-only ref. there's probably a more sane way to do this, but it works for now.
     gh_receiver: Arc<Mutex<Receiver<GitHubMessage>>>,
     cr_config: CrConfig,
+    pr_feeds: PrFeeds,
 }
 type Error = Box<dyn std::error::Error + Send + Sync>;
 type Context<'a> = poise::Context<'a, Data, Error>;
@@ -63,7 +66,7 @@ pub async fn initialize(
     info!("Initializing framework.");
     let framework = poise::Framework::builder()
         .options(poise::FrameworkOptions {
-            commands: vec![cr(), perms()],
+            commands: vec![cr(), perms(), pr_feeds()],
             event_handler: |ctx, event, framework, data| {
                 Box::pin(event_handler(ctx, event, framework, data))
             },
@@ -75,7 +78,12 @@ pub async fn initialize(
                 Ok(Data {
                     gh: Arc::new(github),
                     permissions: Permissions::new(db.clone()),
-                    cr_config: CrConfig::from_db(db.clone()).await.unwrap(),
+                    pr_feeds: PrFeeds::from_db(db.clone())
+                        .await
+                        .expect("Failed initial PR Feeds load"),
+                    cr_config: CrConfig::from_db(db.clone())
+                        .await
+                        .expect("Failed initial CR Config load"),
                     db,
                     gh_receiver: Arc::new(Mutex::new(receiver)),
                 })
@@ -123,6 +131,7 @@ async fn event_handler(
                 data.db.clone(),
                 data.gh.clone(),
                 data.cr_config.clone(),
+                data.pr_feeds.clone(),
             ));
 
             tokio::spawn(cr_component_task(

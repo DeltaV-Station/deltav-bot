@@ -65,6 +65,10 @@ pub enum GitHubMessage {
         username: String,
         comment: String,
     },
+    PrLabeled {
+        pr_id: u64,
+        label: String,
+    },
 }
 
 #[derive(Clone, Debug)]
@@ -172,6 +176,23 @@ async fn on_webhook_request(
                         .await
                         .expect("Failed to send PrOpened message");
                 }
+
+                Labeled => {
+                    if let Some(label) = p.label {
+                        state
+                            .sender
+                            .send(GitHubMessage::PrLabeled {
+                                pr_id: p.number,
+                                label: label.name,
+                            })
+                            .await
+                            .expect("Failed to send PrLabeled message")
+                    } else {
+                        error!("Pull request #{} labeled without label?!", p.number);
+                        return StatusCode::BAD_REQUEST;
+                    }
+                }
+
                 _ => {}
             }
         }

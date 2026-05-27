@@ -1,0 +1,38 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT * FROM prfeeds;",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "gh_label",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "channel_id",
+        "ordinal": 2,
+        "type_info": "Integer"
+      },
+      {
+        "name": "ping_role",
+        "ordinal": 3,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "63423bfee0ceec3ba94800242781c420b02407d02869819bbaf21cb3e447938e"
+}

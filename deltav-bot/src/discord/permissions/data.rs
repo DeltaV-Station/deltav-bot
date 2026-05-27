@@ -16,6 +16,7 @@ bitflags! {
         const CONTENT_REVIEWER      = 1 << 1;
         const PERMISSIONS_VIEW      = 1 << 2;
         const PERMISSIONS_EDIT      = 1 << 3;
+        const PR_FEEDS_EDIT         = 1 << 4;
     }
 }
 
