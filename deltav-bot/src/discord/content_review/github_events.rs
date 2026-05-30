@@ -1,9 +1,10 @@
-use std::sync::Arc;
+use std::{cell::LazyCell, sync::Arc};
 
 use poise::serenity_prelude::{
     CreateActionRow, CreateAllowedMentions, CreateButton, CreateEmbed, CreateEmbedAuthor,
     CreateForumPost, CreateMessage, EditThread, Mentionable,
 };
+use regex::Regex;
 use sqlx::{Pool, Sqlite};
 use tokio::sync::{Mutex, mpsc::Receiver};
 use tracing::{error, info, warn};
@@ -23,6 +24,7 @@ use crate::{
 };
 
 const GH_COMMENT_PREFIX: &'static str = "!discord";
+const HTML_COMMENT_REGEX: LazyCell<Regex> = LazyCell::new(|| Regex::new("<!--(.*?)-->").unwrap());
 
 pub async fn cr_github_task(
     ctx: poise::serenity_prelude::Context,
@@ -307,7 +309,9 @@ pub async fn cr_github_task(
                     pr_id,
                     issue.title,
                     issue.user.login,
-                    issue.body,
+                    issue
+                        .body
+                        .and_then(|x| Some(HTML_COMMENT_REGEX.replace_all(&x, "").to_string())),
                     &gh,
                 ));
 
