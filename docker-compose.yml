@@ -1,6 +1,6 @@
 services:
   deltav-bot:
-    image: ghcr.io/disposablecrewmember42/deltav-bot
+    image: ghcr.io/deltav-station/deltav-bot
     ports:
       - 8080:8080
     environment:
