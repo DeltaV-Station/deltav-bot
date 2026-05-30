@@ -289,7 +289,6 @@ pub async fn cr_github_task(
             }
 
             GitHubMessage::PrLabeled { pr_id, label } => {
-                info!("PRLabeled received: {label}");
                 let Some(feed) = pr_feeds.get_by_label(&label).await else {
                     continue;
                 };
