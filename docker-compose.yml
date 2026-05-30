@@ -1,6 +1,8 @@
 services:
   deltav-bot:
     image: ghcr.io/disposablecrewmember42/deltav-bot
+    ports:
+      - 8080:8080
     environment:
       WEBHOOK_PORT: 8080
       WEBHOOK_SECRET: "verysecurekey"
