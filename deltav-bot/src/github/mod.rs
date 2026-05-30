@@ -1,5 +1,3 @@
-use std::cell::LazyCell;
-
 use axum::{
     Router,
     extract::{Query, State},
@@ -18,10 +16,11 @@ use octocrab::{
         },
     },
 };
-use regex::Regex;
 use serde::Deserialize;
 use tokio::{net::TcpListener, sync::mpsc, task::JoinHandle};
 use tracing::{error, info, warn};
+
+use crate::consts::HTML_COMMENT_REGEX;
 
 pub struct GhAppConfig {
     pub id: AppId,
@@ -81,8 +80,6 @@ struct ServerState {
 struct WebhookQuery {
     key: String,
 }
-
-const HTML_COMMENT_REGEX: LazyCell<Regex> = LazyCell::new(|| Regex::new("<!--(.*?)-->").unwrap());
 
 async fn on_webhook_request(
     State(state): State<ServerState>,

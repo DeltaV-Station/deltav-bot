@@ -8,6 +8,7 @@ use tracing::{error, info};
 
 use crate::github::{GhAppConfig, GitHub};
 
+mod consts;
 mod discord;
 mod github;
 
