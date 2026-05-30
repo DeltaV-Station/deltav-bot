@@ -176,31 +176,13 @@ pub async fn cr_request_changes(ctx: ApplicationContext<'_>) -> Result<(), Error
         return Ok(());
     }
 
-    if let Err(e) = issues
-        .remove_label(discussion.pr_id, under_review_label)
-        .await
-    {
-        let did_label_exist = if let octocrab::Error::GitHub {
-            source,
-            backtrace: _,
-        } = &e
-            && source.status_code == 410
-        {
-            false
-        } else {
-            true
-        };
-
-        if !did_label_exist {
-            error!(
-                "Failed to remove under review label from PR #{}: {e:#?}",
-                discussion.pr_id
-            );
-
-            ctx.reply("Failed to remove under review label").await?;
-            return Ok(());
-        }
-    }
+    try_remove_label(
+        &ctx.data().gh,
+        &under_review_label,
+        &Context::Application(ctx),
+        &discussion,
+    )
+    .await?;
 
     if let Err(e) = discussion.disable_reminders(&ctx.data().db).await {
         ctx.reply(format!(
@@ -330,19 +312,10 @@ pub async fn cr_complete(
             .await?;
     }
 
-    if let Err(e) = issues
-        .remove_label(discussion.pr_id, &under_review_label)
-        .await
-    {
-        error!(
-            "Failed to remove Under Review label from PR #{}: {e}",
-            discussion.pr_id
-        );
-
-        ctx.reply("Failed to remove Under Review GitHub label.")
-            .await?;
-        return Ok(());
-    };
+    try_remove_label(&ctx.data().gh, &under_review_label, &ctx, &discussion).await?;
+    if let Some(changes_requested_label) = config.get_changes_requested_label().await {
+        try_remove_label(&ctx.data().gh, changes_requested_label, &ctx, &discussion).await?;
+    }
 
     if let Err(e) = issues
         .create_comment(
@@ -602,4 +575,43 @@ pub fn create_pr_embed(
         ))
         .title(&pr_title)
         .description(&embed_description)
+}
+
+async fn try_remove_label(
+    gh: &GitHub,
+    label: impl Into<String>,
+    ctx: &Context<'_>,
+    discussion: &DiscussionRecord,
+) -> Result<(), Error> {
+    let label = label.into();
+
+    if let Err(e) = gh
+        .octo_install
+        .issues_by_id(gh.repo)
+        .remove_label(discussion.pr_id, &label)
+        .await
+    {
+        let did_label_exist = if let octocrab::Error::GitHub {
+            source,
+            backtrace: _,
+        } = &e
+            && source.status_code == 410
+        {
+            false
+        } else {
+            true
+        };
+
+        if !did_label_exist {
+            error!(
+                "Failed to remove '{}' label from PR #{}: {e:#?}",
+                label, discussion.pr_id
+            );
+
+            ctx.reply(format!("Failed to remove '{label}' label"))
+                .await?;
+        }
+    }
+
+    Ok(())
 }
