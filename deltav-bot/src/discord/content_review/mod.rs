@@ -529,7 +529,7 @@ pub async fn cr_forum_upsert(
     Ok(())
 }
 
-// Delete a direction forum record (this does not delete the actual channel)
+/// Delete a direction forum record (this does not delete the actual channel)
 #[poise::command(slash_command, rename = "delete", ephemeral)]
 pub async fn cr_forum_delete(
     ctx: Context<'_>,

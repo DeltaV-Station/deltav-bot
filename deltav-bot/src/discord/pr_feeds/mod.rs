@@ -18,12 +18,15 @@ pub async fn pr_feeds(_ctx: Context<'_>) -> Result<(), Error> {
     Ok(())
 }
 
+/// Add a feed with embeds for every PR with a specific GitHub label to a channel
 #[poise::command(slash_command, ephemeral, rename = "add")]
 pub async fn pr_feeds_add(
     ctx: Context<'_>,
-    channel: ChannelId,
-    github_label: String,
-    ping_role: Option<RoleId>,
+    #[description = "The channel matching PRs should be sent to"] channel: ChannelId,
+    #[description = "The exact GitHub label that should be filtered for"] github_label: String,
+    #[description = "The role that should be pinged in each feed message"] ping_role: Option<
+        RoleId,
+    >,
 ) -> Result<(), Error> {
     if !check_permissions_command(&ctx, PermissionFlags::PR_FEEDS_EDIT).await? {
         return Ok(());
@@ -69,6 +72,7 @@ pub async fn pr_feeds_add(
     Ok(())
 }
 
+/// List all registered PR Feeds.
 #[poise::command(slash_command, ephemeral, rename = "list")]
 pub async fn pr_feeds_list(ctx: Context<'_>) -> Result<(), Error> {
     if !check_permissions_command(&ctx, PermissionFlags::PR_FEEDS_EDIT).await? {
@@ -98,8 +102,12 @@ pub async fn pr_feeds_list(ctx: Context<'_>) -> Result<(), Error> {
     Ok(())
 }
 
+/// Remove a specific PR Feed. Use /pr-feeds list to get the ID.
 #[poise::command(slash_command, ephemeral, rename = "remove")]
-pub async fn pr_feeds_remove(ctx: Context<'_>, feed_id: String) -> Result<(), Error> {
+pub async fn pr_feeds_remove(
+    ctx: Context<'_>,
+    #[description = "The ID of the feed you want to remove"] feed_id: String,
+) -> Result<(), Error> {
     if !check_permissions_command(&ctx, PermissionFlags::PR_FEEDS_EDIT).await? {
         return Ok(());
     }
