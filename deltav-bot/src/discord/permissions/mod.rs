@@ -5,7 +5,7 @@ use poise::{
     ChoiceParameter, CommandParameterChoice,
     serenity_prelude::{ComponentInteraction, CreateInteractionResponseMessage, RoleId, UserId},
 };
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 use crate::discord::{
     Context, Error,
@@ -176,6 +176,15 @@ pub async fn perms_breakdown(
     ctx: Context<'_>,
     #[description = "User to check"] user: UserId,
 ) -> Result<(), Error> {
+    let Some(guild) = ctx.guild_id() else {
+        warn!(
+            "Perms breakdown invoked outside of guild by {} ({}).",
+            ctx.author().name,
+            ctx.author().id
+        );
+        return Ok(());
+    };
+
     if !check_permissions_command(&ctx, PermissionFlags::PERMISSIONS_VIEW).await? {
         return Ok(());
     }
@@ -193,29 +202,28 @@ pub async fn perms_breakdown(
         any_permissions = true;
     }
 
-    if let Some(member) = ctx.author_member().await {
-        for role in &member.roles {
-            let role_perms = match ctx.data().permissions.get_flags(role.get()).await {
-                Ok(role_perms) => role_perms,
-                Err(e) => {
-                    response += &format!(
-                        "Encountered an error while checking permissions of role <@&{role}>: {e}"
-                    );
-                    ctx.reply(response).await?;
-                    return Ok(());
-                }
-            };
-
-            if role_perms.is_empty() {
-                continue;
+    let member = guild.member(&ctx, user).await?;
+    for role in &member.roles {
+        let role_perms = match ctx.data().permissions.get_flags(role.get()).await {
+            Ok(role_perms) => role_perms,
+            Err(e) => {
+                response += &format!(
+                    "Encountered an error while checking permissions of role <@&{role}>: {e}"
+                );
+                ctx.reply(response).await?;
+                return Ok(());
             }
+        };
 
-            any_permissions = true;
+        if role_perms.is_empty() {
+            continue;
+        }
 
-            response += &format!("### Role <@&{role}>\n");
-            for (name, _) in role_perms.iter_names() {
-                response += &format!("- `{name}`\n");
-            }
+        any_permissions = true;
+
+        response += &format!("### Role <@&{role}>\n");
+        for (name, _) in role_perms.iter_names() {
+            response += &format!("- `{name}`\n");
         }
     }
 
