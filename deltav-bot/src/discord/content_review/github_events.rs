@@ -218,13 +218,15 @@ pub async fn cr_github_task(
                     .thread_id
                     .edit_thread(
                         &ctx,
-                        EditThread::new().applied_tags(
-                            guild_channel
-                                .applied_tags
-                                .iter()
-                                .chain([forum.tag_pr_closed].iter())
-                                .cloned(),
-                        ),
+                        EditThread::new()
+                            .applied_tags(
+                                guild_channel
+                                    .applied_tags
+                                    .iter()
+                                    .chain([forum.tag_pr_closed].iter())
+                                    .cloned(),
+                            )
+                            .archived(true),
                     )
                     .await
                 {
@@ -270,13 +272,15 @@ pub async fn cr_github_task(
                     .thread_id
                     .edit_thread(
                         &ctx,
-                        EditThread::new().applied_tags(
-                            guild_channel
-                                .applied_tags
-                                .iter()
-                                .chain([forum.tag_pr_merged].iter())
-                                .cloned(),
-                        ),
+                        EditThread::new()
+                            .applied_tags(
+                                guild_channel
+                                    .applied_tags
+                                    .iter()
+                                    .chain([forum.tag_pr_merged].iter())
+                                    .cloned(),
+                            )
+                            .archived(true),
                     )
                     .await
                 {
