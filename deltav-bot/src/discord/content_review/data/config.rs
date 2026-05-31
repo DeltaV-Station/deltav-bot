@@ -367,7 +367,9 @@ impl CrConfig {
             out.push(under_review);
         }
 
-        // Excluding changes requested because that might be applied by maints
+        if let Some(changes_requested) = self.get_changes_requested_label().await {
+            out.push(changes_requested);
+        }
 
         out
     }
