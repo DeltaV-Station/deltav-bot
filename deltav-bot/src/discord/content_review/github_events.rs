@@ -33,7 +33,7 @@ pub async fn cr_github_task(
     config: CrConfig,
     pr_feeds: PrFeeds,
 ) {
-    while let Some(message) = receiver.lock().await.recv().await {
+    'outer: while let Some(message) = receiver.lock().await.recv().await {
         match message {
             GitHubMessage::PrOpened {
                 pr_id,
@@ -41,7 +41,7 @@ pub async fn cr_github_task(
                 pr_body,
                 opened_by,
             } => {
-                let Some(main_forum) = config.get_intake_forum().await else {
+                let Some(intake_forum) = config.get_intake_forum().await else {
                     warn!("Received PrOpened but main forum is not set.");
                     continue;
                 };
@@ -96,7 +96,32 @@ pub async fn cr_github_task(
                     continue;
                 }
 
-                match main_forum
+                let issues = gh.octo_install.issues_by_id(gh.repo);
+                let labels = match issues
+                    .list_labels_for_issue(pr_id)
+                    .per_page(100)
+                    .send()
+                    .await
+                {
+                    Err(e) => {
+                        error!("Failed to get list of labels for PR #{pr_id}: {e:#?}");
+                        Vec::new() // better to start a duplicate thread than to ignore a new PR
+                    }
+                    Ok(x) => x.items,
+                };
+
+                let defined_labels = config.get_cr_github_labels().await;
+                for label in &labels {
+                    if defined_labels.contains(&label.name) {
+                        info!(
+                            "Not creating intake thread for opened PR with already applied CR label '{}'",
+                            label.name
+                        );
+                        continue 'outer;
+                    }
+                }
+
+                match intake_forum
                     .create_forum_post(
                         &ctx,
                         CreateForumPost::new(
@@ -124,7 +149,7 @@ pub async fn cr_github_task(
                     Ok(post_channel) => {
                         info!("Created thread {} for PR #{pr_id}", post_channel.id.get());
                         let discussion = DiscussionRecord {
-                            forum_id: main_forum,
+                            forum_id: intake_forum,
                             pr_id,
                             thread_id: post_channel.id,
                             pr_title,

@@ -351,4 +351,24 @@ impl CrConfig {
             }
         };
     }
+
+    pub async fn get_cr_github_labels(&self) -> Vec<String> {
+        let mut out = Vec::new();
+
+        if let Some(approved) = self.get_approved_label().await {
+            out.push(approved);
+        }
+
+        if let Some(denied) = self.get_denied_label().await {
+            out.push(denied);
+        }
+
+        if let Some(under_review) = self.get_under_review_label().await {
+            out.push(under_review);
+        }
+
+        // Excluding changes requested because that might be applied by maints
+
+        out
+    }
 }
