@@ -110,7 +110,7 @@ pub async fn cr_github_task(
                     Ok(x) => x.items,
                 };
 
-                let defined_labels = config.get_cr_github_labels().await;
+                let defined_labels = config.get_defined_github_labels().await;
                 for label in &labels {
                     if defined_labels.contains(&label.name) {
                         info!(

@@ -352,7 +352,7 @@ impl CrConfig {
         };
     }
 
-    pub async fn get_cr_github_labels(&self) -> Vec<String> {
+    pub async fn get_defined_github_labels(&self) -> Vec<String> {
         let mut out = Vec::new();
 
         if let Some(approved) = self.get_approved_label().await {
