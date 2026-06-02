@@ -112,11 +112,7 @@ impl PrFeeds {
         }
 
         let mut feeds = self.feeds.write().await;
-
-        let cache_index = feeds
-            .iter()
-            .enumerate()
-            .find_map(|(index, feed)| if feed.id == id { Some(index) } else { None });
+        let cache_index = feeds.iter().position(|x| x.id == id);
 
         if let Some(cache_index) = cache_index {
             feeds.remove(cache_index);
