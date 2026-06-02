@@ -1,0 +1,32 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT * FROM cr_ignored",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "kind",
+        "ordinal": 1,
+        "type_info": "Integer"
+      },
+      {
+        "name": "value",
+        "ordinal": 2,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "484b0f569919a9bcc90f63b8ced1b66f19758008e7ddb82a1b92baef214f3f7e"
+}

@@ -11,6 +11,7 @@ use crate::{
     discord::{
         ApplicationContext, Context, EMBED_DESC_MAX_LEN, Error,
         content_review::data::{
+            config::ignored::IgnoredKind,
             discussions::DiscussionRecord,
             forums::{ForumRecord, delete_forum_by_channel},
         },
@@ -83,7 +84,13 @@ async fn discussion_channel_to_guild(
 
 #[poise::command(
     slash_command,
-    subcommands("cr_forum", "cr_config", "cr_complete", "cr_request_changes")
+    subcommands(
+        "cr_forum",
+        "cr_config",
+        "cr_complete",
+        "cr_request_changes",
+        "cr_ignored"
+    )
 )]
 pub async fn cr(_ctx: Context<'_>) -> Result<(), Error> {
     // dummy command
@@ -548,6 +555,87 @@ pub async fn cr_forum_delete(
         }
     }
 
+    Ok(())
+}
+
+#[poise::command(
+    slash_command,
+    rename = "ignored",
+    subcommands("cr_ignored_list", "cr_ignored_add", "cr_ignored_remove")
+)]
+pub async fn cr_ignored(_ctx: Context<'_>) -> Result<(), Error> {
+    // dummy command
+    Ok(())
+}
+
+/// List all PR ignore criteria.
+#[poise::command(slash_command, rename = "list", ephemeral)]
+pub async fn cr_ignored_list(ctx: Context<'_>) -> Result<(), Error> {
+    if !check_permissions_command(&ctx, PermissionFlags::CONTENT_REVIEW_CONFIG).await? {
+        return Ok(());
+    }
+
+    let mut message = String::from("**PR Ignore Criteria**\n");
+
+    let criteria = ctx.data().cr_config.ignored.get_all().await;
+    for criterion in &criteria {
+        message += &format!(
+            "ID {}: {} `{}`\n",
+            criterion.id,
+            criterion.kind.name(),
+            criterion.value
+        );
+    }
+
+    if criteria.is_empty() {
+        message += "None.";
+    }
+
+    ctx.reply(message).await?;
+    Ok(())
+}
+
+/// Add a PR ignore criterion.
+#[poise::command(slash_command, rename = "add", ephemeral)]
+pub async fn cr_ignored_add(
+    ctx: Context<'_>,
+    #[description = "The kind of value"] kind: IgnoredKind,
+    #[description = "PRs with matchign values will be ignored"] value: String,
+) -> Result<(), Error> {
+    if !check_permissions_command(&ctx, PermissionFlags::CONTENT_REVIEW_CONFIG).await? {
+        return Ok(());
+    }
+
+    if let Err(e) = ctx.data().cr_config.ignored.add(kind, value).await {
+        ctx.reply(format!("Failed to add ignore criterion: {e}"))
+            .await?;
+    }
+
+    ctx.reply("Successfully added ignore criterion.").await?;
+    Ok(())
+}
+
+/// Remove a specific PR ignore criterion. Use /cr ignored list to get the ID.
+#[poise::command(slash_command, rename = "remove", ephemeral)]
+pub async fn cr_ignored_remove(
+    ctx: Context<'_>,
+    #[description = "The ID from /cr ignored list"] id: String,
+) -> Result<(), Error> {
+    if !check_permissions_command(&ctx, PermissionFlags::CONTENT_REVIEW_CONFIG).await? {
+        return Ok(());
+    }
+
+    let Ok(id) = id.parse::<i64>() else {
+        ctx.reply("Specified ID is invalid.").await?;
+        return Ok(());
+    };
+
+    if let Err(e) = ctx.data().cr_config.ignored.remove(id).await {
+        ctx.reply(format!("Failed to remove ignore criterion: {e}"))
+            .await?;
+    }
+
+    ctx.reply("Successfully removed ignore criterion.").await?;
     Ok(())
 }
 

@@ -14,6 +14,7 @@ poise = "0.6.1"
 regex = { version = "1.12.3" }
 serde = { version = "1.0.228", features = ["derive"] }
 sqlx = { version = "0.8.6", features = ["sqlite", "runtime-tokio"] }
+strum = { version = "0.28.0", features = ["derive"] }
 thiserror = "2.0.18"
 tokio = { version = "1.50.0", features = ["full"] }
 tracing = "0.1.44"

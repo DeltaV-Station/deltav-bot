@@ -1,0 +1,5 @@
+CREATE TABLE IF NOT EXISTS cr_ignored (
+    id    INTEGER PRIMARY KEY,
+    kind  INTEGER NOT NULL,
+    value TEXT NOT NULL
+);

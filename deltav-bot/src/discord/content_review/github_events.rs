@@ -15,7 +15,11 @@ use crate::{
         content_review::{
             BUTTON_ID_ACTION_NOT_NEEDED, BUTTON_ID_ACTION_START_PRIVATE,
             BUTTON_ID_ACTION_START_PUBLIC, INTERACTION_ID_PREFIX, create_pr_embed,
-            data::{config::CrConfig, discussions::DiscussionRecord, forums::ForumRecord},
+            data::{
+                config::{CrConfig, ignored::IgnoredKind},
+                discussions::DiscussionRecord,
+                forums::ForumRecord,
+            },
             discussion_channel_to_guild,
         },
         pr_feeds::data::PrFeeds,
@@ -41,6 +45,15 @@ pub async fn cr_github_task(
                 pr_body,
                 opened_by,
             } => {
+                if config
+                    .ignored
+                    .is_ignored(IgnoredKind::Author, &opened_by)
+                    .await
+                {
+                    info!("Ignoring opened PR #{pr_id} due to ignored author {opened_by}.");
+                    continue;
+                }
+
                 let Some(intake_forum) = config.get_intake_forum().await else {
                     warn!("Received PrOpened but main forum is not set.");
                     continue;
@@ -317,6 +330,23 @@ pub async fn cr_github_task(
             }
 
             GitHubMessage::PrLabeled { pr_id, label } => {
+                if let Some(discussion) = DiscussionRecord::get_by_pr(&db, pr_id).await {
+                    if config.ignored.is_ignored(IgnoredKind::Label, &label).await
+                        && discussion.forum_id
+                            == config.get_intake_forum().await.unwrap_or_default()
+                    {
+                        info!(
+                            "PR #{pr_id} has received ignored label '{label}' and is still in CR intake forum. Deleting it."
+                        );
+
+                        if let Err(e) = discussion.thread_id.delete(&ctx).await {
+                            error!("Failed to delete discussion thread for PR #{pr_id}: {e:#?}");
+                        }
+
+                        let _ = discussion.delete(&db).await;
+                    }
+                }
+
                 let Some(feed) = pr_feeds.get_by_label(&label).await else {
                     continue;
                 };

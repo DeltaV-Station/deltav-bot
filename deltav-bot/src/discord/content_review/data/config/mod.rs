@@ -5,12 +5,15 @@ use sqlx::{Pool, Sqlite};
 use tokio::sync::RwLock;
 use tracing::{error, info, warn};
 
-use crate::discord::content_review::HandledError;
+use crate::discord::content_review::{HandledError, data::config::ignored::IgnoreCriteria};
+
+pub mod ignored;
 
 #[derive(Clone)]
 pub struct CrConfig {
     db: Pool<Sqlite>,
     cache: Arc<RwLock<ConfigCache>>,
+    pub ignored: IgnoreCriteria,
 }
 
 #[derive(Default)]
@@ -31,6 +34,7 @@ struct ConfigCache {
 impl CrConfig {
     pub async fn from_db(db: Pool<Sqlite>) -> Result<Self, Box<dyn std::error::Error>> {
         info!("Loading CR Config from DB.");
+        let ignored = IgnoreCriteria::from_db(db.clone()).await?;
         match sqlx::query!("SELECT * FROM cr_config WHERE id = 1")
             .fetch_optional(&db)
             .await
@@ -56,6 +60,7 @@ impl CrConfig {
                         .review_ping_role
                         .and_then(|x| Some(RoleId::new(x.cast_unsigned()))),
                 })),
+                ignored,
             }),
             Ok(None) => {
                 warn!("Missing config row.");
@@ -63,6 +68,7 @@ impl CrConfig {
                 Ok(Self {
                     db,
                     cache: Arc::new(RwLock::new(ConfigCache::default())),
+                    ignored,
                 })
             }
             Err(e) => {
