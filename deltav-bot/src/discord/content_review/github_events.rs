@@ -230,6 +230,17 @@ pub async fn cr_github_task(
                     discussion.thread_id.get()
                 );
 
+                if discussion.forum_id == config.get_intake_forum().await.unwrap_or_default() {
+                    info!("PR #{pr_id} is still in intake after closure. Deleting discussion.");
+
+                    if let Err(e) = discussion.thread_id.delete(&ctx).await {
+                        error!("Failed to delete thread for PR #{pr_id}: {e:#?}");
+                    }
+
+                    let _ = discussion.delete(&db).await;
+                    continue;
+                }
+
                 let Some(forum) = ForumRecord::get_by_channel(&db, discussion.forum_id).await
                 else {
                     continue;
@@ -283,6 +294,17 @@ pub async fn cr_github_task(
                     "PR {pr_id}, associated with thread {}, has been merged.",
                     discussion.thread_id.get()
                 );
+
+                if discussion.forum_id == config.get_intake_forum().await.unwrap_or_default() {
+                    info!("PR #{pr_id} is still in intake after merge. Deleting discussion.");
+
+                    if let Err(e) = discussion.thread_id.delete(&ctx).await {
+                        error!("Failed to delete thread for PR #{pr_id}: {e:#?}");
+                    }
+
+                    let _ = discussion.delete(&db).await;
+                    continue;
+                }
 
                 let Some(forum) = ForumRecord::get_by_channel(&db, discussion.forum_id).await
                 else {
