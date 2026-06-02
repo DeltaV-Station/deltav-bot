@@ -1,3 +1,5 @@
+#![allow(dead_code)] // TODO: remove
+
 use std::str::FromStr;
 
 use jsonwebtoken::EncodingKey;
