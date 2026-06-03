@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE cr_discussions SET forum_id=?1 WHERE pr_id = ?2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "19adc1b163905bae2fa19108bf523eb4838962c68930c109055b7c84b4b9e8dd"
+}
