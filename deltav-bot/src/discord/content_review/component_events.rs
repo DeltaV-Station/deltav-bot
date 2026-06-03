@@ -213,6 +213,7 @@ pub async fn start_review_task(
 
         let intake_thread = discussion.thread_id;
 
+        discussion.set_forum_id(&db, forum_channel).await?;
         discussion.set_thread_id(&db, new_thread.id).await?;
         discussion.delete_body(&db).await?;
         discussion.setup_review_time(&db, review_time_days).await?;

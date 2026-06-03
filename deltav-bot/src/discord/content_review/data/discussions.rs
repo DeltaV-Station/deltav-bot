@@ -75,6 +75,35 @@ impl DiscussionRecord {
         Ok(())
     }
 
+    pub async fn set_forum_id(
+        &mut self,
+        db: &Pool<Sqlite>,
+        new_forum: ChannelId,
+    ) -> Result<(), HandledError> {
+        let new_forum_s = new_forum.get().cast_signed();
+        let pr_id_s = self.pr_id.cast_signed();
+
+        if let Err(e) = sqlx::query!(
+            "UPDATE cr_discussions SET forum_id=?1 WHERE pr_id = ?2",
+            new_forum_s,
+            pr_id_s
+        )
+        .execute(db)
+        .await
+        {
+            error!(
+                "Failed to set new forum id {new_forum} for discussion of PR #{}: {e}",
+                self.pr_id
+            );
+
+            return Err(HandledError::InternalError);
+        }
+
+        self.forum_id = new_forum;
+
+        Ok(())
+    }
+
     pub async fn delete(&self, db: &Pool<Sqlite>) -> Result<(), HandledError> {
         let pr_id_s = self.pr_id.cast_signed();
         if let Err(e) = sqlx::query!("DELETE FROM cr_discussions WHERE pr_id = ?1", pr_id_s)
