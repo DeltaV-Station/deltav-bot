@@ -153,7 +153,20 @@ async fn event_handler(
     Ok(())
 }
 
-/// All this does is remove the ` character so reviewers can't close the code block containing their comment
-pub fn sanitize_comment(comment: impl AsRef<str>) -> String {
-    comment.as_ref().replace('`', "")
+/// Prepends each line with `> ` and ensures there's two newlines at the end, as text on the next line would become part of the quoteblock.
+pub fn to_md_quote_block(comment: impl AsRef<str>) -> String {
+    let comment = comment.as_ref();
+    let mut out = String::with_capacity(comment.len() + 16);
+
+    out += "> ";
+    for char in comment.chars() {
+        if char != '\n' {
+            out.push(char);
+        } else {
+            out.push_str("\n> ");
+        }
+    }
+    out.push_str("\n\n");
+
+    out
 }

@@ -16,7 +16,7 @@ use crate::{
             forums::{ForumRecord, delete_forum_by_channel},
         },
         permissions::{check_permissions_command, data::PermissionFlags},
-        sanitize_comment,
+        to_md_quote_block,
     },
     github::GitHub,
 };
@@ -138,8 +138,8 @@ pub async fn cr_request_changes(ctx: ApplicationContext<'_>) -> Result<(), Error
             .create_comment(
                 discussion.pr_id,
                 format!(
-                    "**Changes requested by CR**\n```\n{}\n```\nSent by {}.",
-                    sanitize_comment(&response.description),
+                    "**Changes requested by CR**\n{}Sent by {}.",
+                    to_md_quote_block(&response.description),
                     ctx.author().name
                 ),
             )
@@ -328,9 +328,13 @@ pub async fn cr_complete(
         .create_comment(
             discussion.pr_id,
             format!(
-                "**CR consensus: {}**\n```\n{}\n```\nReview closed by {}.",
+                "**CR consensus: {}**\n{}Review closed by {}.",
                 outcome.name(),
-                sanitize_comment(comment.unwrap_or("No comment.".into())),
+                if let Some(comment) = comment {
+                    to_md_quote_block(comment)
+                } else {
+                    String::new()
+                },
                 ctx.author().name
             ),
         )
