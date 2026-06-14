@@ -351,6 +351,25 @@ pub async fn cr_github_task(
                 }
             }
 
+            GitHubMessage::PrDrafted { pr_id, drafted_by } => {
+                let Some(discussion) = DiscussionRecord::get_by_pr(&db, pr_id).await else {
+                    continue;
+                };
+
+                if let Err(e) = discussion
+                    .thread_id
+                    .send_message(
+                        &ctx,
+                        CreateMessage::new().content(format!(
+                            "This PR has been converted into a draft by `{drafted_by}`."
+                        )),
+                    )
+                    .await
+                {
+                    error!("Failed to send message about PR {pr_id} closing: {e:#?}");
+                }
+            }
+
             GitHubMessage::PrLabeled { pr_id, label } => {
                 if let Some(discussion) = DiscussionRecord::get_by_pr(&db, pr_id).await {
                     if config.ignored.is_ignored(IgnoredKind::Label, &label).await

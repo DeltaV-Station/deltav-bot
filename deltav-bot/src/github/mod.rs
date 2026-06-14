@@ -68,6 +68,10 @@ pub enum GitHubMessage {
         pr_id: u64,
         label: String,
     },
+    PrDrafted {
+        pr_id: u64,
+        drafted_by: String,
+    },
 }
 
 #[derive(Clone, Debug)]
@@ -172,6 +176,17 @@ async fn on_webhook_request(
                         })
                         .await
                         .expect("Failed to send PrOpened message");
+                }
+
+                ConvertedToDraft => {
+                    state
+                        .sender
+                        .send(GitHubMessage::PrDrafted {
+                            pr_id: p.number,
+                            drafted_by: sender_login,
+                        })
+                        .await
+                        .expect("Failed to send PrDrafted message");
                 }
 
                 Labeled => {
