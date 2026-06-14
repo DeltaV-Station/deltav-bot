@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use poise::serenity_prelude::{
-    CreateActionRow, CreateAllowedMentions, CreateButton, CreateEmbed, CreateEmbedAuthor,
-    CreateForumPost, CreateMessage, EditThread, Mentionable,
+    ChannelId, CreateActionRow, CreateAllowedMentions, CreateButton, CreateEmbed,
+    CreateEmbedAuthor, CreateForumPost, CreateMessage, EditThread, Mentionable,
 };
 use sqlx::{Pool, Sqlite};
 use tokio::sync::{Mutex, mpsc::Receiver};
@@ -27,8 +27,10 @@ use crate::{
     github::{GitHub, GitHubMessage},
 };
 
-const GH_COMMENT_PREFIX: &'static str = "!discord";
+const GH_COMMENT_COMMAND: &'static str = "!discord";
+const GH_REVIEW_COMMAND: &'static str = "!review";
 
+// TODO: spawn tasks to handle these, use semaphore
 pub async fn cr_github_task(
     ctx: poise::serenity_prelude::Context,
     receiver: Arc<Mutex<Receiver<GitHubMessage>>>,
@@ -134,90 +136,82 @@ pub async fn cr_github_task(
                     }
                 }
 
-                match intake_forum
-                    .create_forum_post(
-                        &ctx,
-                        CreateForumPost::new(
-                            format!("{pr_title} #{pr_id}"),
-                            CreateMessage::new()
-                                .add_embed(create_pr_embed(pr_id, pr_title.clone(), opened_by.clone(), pr_body.clone(), &gh))
-                                .components(vec![CreateActionRow::Buttons(vec![
-                                    CreateButton::new(format!(
-                                        "{INTERACTION_ID_PREFIX}_{BUTTON_ID_ACTION_START_PUBLIC}_{pr_id}"
-                                    ))
-                                    .label("Public review"),
-                                    CreateButton::new(format!(
-                                        "{INTERACTION_ID_PREFIX}_{BUTTON_ID_ACTION_START_PRIVATE}_{pr_id}"
-                                    ))
-                                    .label("Private review"),
-                                    CreateButton::new(format!(
-                                        "{INTERACTION_ID_PREFIX}_{BUTTON_ID_ACTION_NOT_NEEDED}_{pr_id}"
-                                    ))
-                                    .label("No review needed"),
-                                ])]),
-                        ),
-                    )
-                    .await
-                {
-                    Ok(post_channel) => {
-                        info!("Created thread {} for PR #{pr_id}", post_channel.id.get());
-                        let discussion = DiscussionRecord {
-                            forum_id: intake_forum,
-                            pr_id,
-                            thread_id: post_channel.id,
-                            pr_title,
-                            pr_author: opened_by,
-                            pr_body,
-                            ..Default::default()
-                        };
-
-                        let _ = discussion.insert(&db).await;
-                    }
-                    Err(e) => {
-                        error!("Failed to create forum post for opened PR {pr_id}: {e:#?}");
-                    }
-                }
+                create_intake_post(
+                    intake_forum,
+                    &ctx,
+                    pr_id,
+                    pr_title,
+                    opened_by,
+                    pr_body,
+                    &gh,
+                    &db,
+                )
+                .await;
             }
 
-            GitHubMessage::AuthorOrMaintCommented {
+            GitHubMessage::Comment {
                 issue_id,
                 username,
                 comment,
+                is_pr_author,
+                is_maintainer,
+                is_contributor,
             } => {
-                let Some(discussion) = DiscussionRecord::get_by_pr(&db, issue_id).await else {
-                    continue;
-                };
+                let comment_lower = comment.to_ascii_lowercase();
+                if comment_lower.starts_with(GH_COMMENT_COMMAND) {
+                    if !is_maintainer && !is_pr_author {
+                        continue;
+                    }
 
-                if !comment.to_ascii_lowercase().starts_with(GH_COMMENT_PREFIX) {
-                    continue;
-                }
+                    let Some(discussion) = DiscussionRecord::get_by_pr(&db, issue_id).await else {
+                        continue;
+                    };
 
-                info!(
-                    "Author or maintainer {username} wrote a comment in PR #{issue_id}, associated with thread {}.",
-                    discussion.thread_id.get()
-                );
+                    relay_github_comment(username, issue_id, discussion, comment, &ctx).await;
+                } else if comment_lower.trim() == GH_REVIEW_COMMAND {
+                    if !is_pr_author && !is_contributor {
+                        continue;
+                    }
 
-                let comment: String = comment[GH_COMMENT_PREFIX.len()..]
-                    .chars()
-                    .take(EMBED_DESC_MAX_LEN)
-                    .collect();
+                    if DiscussionRecord::get_by_pr(&db, issue_id).await.is_some() {
+                        info!(
+                            "{username} tried to request a CR review for PR #{issue_id} using the GitHub command, but a discussion record already exists."
+                        );
+                        continue;
+                    };
 
-                if let Err(e) = discussion
-                    .thread_id
-                    .send_message(
+                    let Some(intake_forum) = config.get_intake_forum().await else {
+                        continue;
+                    };
+
+                    let pr = match gh
+                        .octo_install
+                        .pulls(&gh.repo_owner, &gh.repo_name)
+                        .get(issue_id)
+                        .await
+                    {
+                        Ok(x) => x,
+                        Err(e) => {
+                            error!(
+                                "{username} requested a CR review for on issue ID {issue_id}, but PR data could not be fetched: {e:#?}"
+                            );
+                            continue;
+                        }
+                    };
+
+                    create_intake_post(
+                        intake_forum,
                         &ctx,
-                        CreateMessage::new().add_embed(
-                            CreateEmbed::new()
-                                .author(CreateEmbedAuthor::new(format!("{username} via GitHub")))
-                                .description(comment),
-                        ),
+                        issue_id,
+                        pr.title.unwrap_or("Untitled".into()),
+                        pr.user
+                            .and_then(|x| Some(x.login))
+                            .unwrap_or("Unknown".into()),
+                        pr.body,
+                        &gh,
+                        &db,
                     )
-                    .await
-                {
-                    error!(
-                        "Failed to relay GitHub comment for PR #{issue_id} to Discord thread {}: {e:#?}",
-                        discussion.thread_id
-                    );
+                    .await;
                 }
             }
 
@@ -385,6 +379,10 @@ pub async fn cr_github_task(
                         }
 
                         let _ = discussion.delete(&db).await;
+
+                        if let Err(e) = gh.octo_install.issues_by_id(gh.repo).create_comment(pr_id, format!("This PR has been automatically excluded from the Content Review process because it was labeled `{label}`. If it should be reviewed anyway, please comment `!review`.")).await {
+                            error!("Failed to create comment about PR #{pr_id} being ignored for label {label}: {e:#?}");
+                        }
                     }
                 }
 
@@ -426,6 +424,103 @@ pub async fn cr_github_task(
                     );
                 }
             }
+        }
+    }
+}
+
+async fn relay_github_comment(
+    username: String,
+    issue_id: u64,
+    discussion: DiscussionRecord,
+    comment: String,
+    ctx: &poise::serenity_prelude::Context,
+) {
+    info!(
+        "Author or maintainer {username} wrote a comment in PR #{issue_id}, associated with thread {}.",
+        discussion.thread_id.get()
+    );
+
+    let comment: String = comment[GH_COMMENT_COMMAND.len()..]
+        .chars()
+        .take(EMBED_DESC_MAX_LEN)
+        .collect();
+
+    if let Err(e) = discussion
+        .thread_id
+        .send_message(
+            ctx,
+            CreateMessage::new().add_embed(
+                CreateEmbed::new()
+                    .author(CreateEmbedAuthor::new(format!("{username} via GitHub")))
+                    .description(comment),
+            ),
+        )
+        .await
+    {
+        error!(
+            "Failed to relay GitHub comment for PR #{issue_id} to Discord thread {}: {e:#?}",
+            discussion.thread_id
+        );
+    }
+}
+
+async fn create_intake_post(
+    intake_forum: ChannelId,
+    ctx: &poise::serenity_prelude::Context,
+    pr_id: u64,
+    pr_title: String,
+    opened_by: String,
+    pr_body: Option<String>,
+    gh: &Arc<GitHub>,
+    db: &Pool<Sqlite>,
+) {
+    match intake_forum
+        .create_forum_post(
+            ctx,
+            CreateForumPost::new(
+                format!("{pr_title} #{pr_id}"),
+                CreateMessage::new()
+                    .add_embed(create_pr_embed(
+                        pr_id,
+                        pr_title.clone(),
+                        opened_by.clone(),
+                        pr_body.clone(),
+                        gh,
+                    ))
+                    .components(vec![CreateActionRow::Buttons(vec![
+                        CreateButton::new(format!(
+                            "{INTERACTION_ID_PREFIX}_{BUTTON_ID_ACTION_START_PUBLIC}_{pr_id}"
+                        ))
+                        .label("Public review"),
+                        CreateButton::new(format!(
+                            "{INTERACTION_ID_PREFIX}_{BUTTON_ID_ACTION_START_PRIVATE}_{pr_id}"
+                        ))
+                        .label("Private review"),
+                        CreateButton::new(format!(
+                            "{INTERACTION_ID_PREFIX}_{BUTTON_ID_ACTION_NOT_NEEDED}_{pr_id}"
+                        ))
+                        .label("No review needed"),
+                    ])]),
+            ),
+        )
+        .await
+    {
+        Ok(post_channel) => {
+            info!("Created thread {} for PR #{pr_id}", post_channel.id.get());
+            let discussion = DiscussionRecord {
+                forum_id: intake_forum,
+                pr_id,
+                thread_id: post_channel.id,
+                pr_title,
+                pr_author: opened_by,
+                pr_body,
+                ..Default::default()
+            };
+
+            let _ = discussion.insert(&db).await;
+        }
+        Err(e) => {
+            error!("Failed to create forum post for opened PR {pr_id}: {e:#?}");
         }
     }
 }

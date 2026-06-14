@@ -326,8 +326,7 @@ pub async fn no_review_needed_task(
     }
 }
 
-// TODO: This should do as little work as possible to verify permissions and basic validity before
-//       spawning a task to handle the interaction so other interactions aren't held up
+// TODO: Use semaphore
 pub async fn cr_component_task(
     ctx: poise::serenity_prelude::Context,
     db: Pool<Sqlite>,
@@ -343,7 +342,6 @@ pub async fn cr_component_task(
         })
         .await
     {
-        // TODO: Check permissions
         match interaction.data.kind {
             ComponentInteractionDataKind::Button => {
                 let error_response = CreateInteractionResponse::Message(

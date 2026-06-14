@@ -59,10 +59,13 @@ pub enum GitHubMessage {
         pr_id: u64,
         merged_by: String,
     },
-    AuthorOrMaintCommented {
+    Comment {
         issue_id: u64,
         username: String,
         comment: String,
+        is_pr_author: bool,
+        is_maintainer: bool,
+        is_contributor: bool,
     },
     PrLabeled {
         pr_id: u64,
@@ -214,23 +217,16 @@ async fn on_webhook_request(
                 return StatusCode::OK;
             }
 
-            let is_pr_author = c.comment.user.login == c.issue.user.login;
-            let is_maintainer = c
-                .comment
-                .author_association
-                .as_ref()
-                .and_then(|x| {
-                    Some(
-                        *x == AuthorAssociation::Collaborator
-                            || *x == AuthorAssociation::Member
-                            || *x == AuthorAssociation::Owner,
-                    )
-                })
-                .unwrap_or_default();
+            let Some(association) = &c.comment.author_association else {
+                error!("Received comment without author association: {c:#?}");
+                return StatusCode::BAD_REQUEST;
+            };
 
-            if !is_pr_author && !is_maintainer {
-                return StatusCode::OK;
-            }
+            let is_pr_author = c.comment.user.login == c.issue.user.login;
+            let is_maintainer = *association == AuthorAssociation::Collaborator
+                || *association == AuthorAssociation::Member
+                || *association == AuthorAssociation::Owner;
+            let is_contributor = is_maintainer || *association == AuthorAssociation::Contributor;
 
             let Some(body) = c.comment.body else {
                 error!("Received comment without body: {c:#?}");
@@ -239,10 +235,13 @@ async fn on_webhook_request(
 
             state
                 .sender
-                .send(GitHubMessage::AuthorOrMaintCommented {
+                .send(GitHubMessage::Comment {
                     issue_id: c.issue.number,
                     username: c.comment.user.login,
                     comment: body,
+                    is_pr_author,
+                    is_maintainer,
+                    is_contributor,
                 })
                 .await
                 .expect("Failed to send PrEdited message");
