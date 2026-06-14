@@ -147,30 +147,6 @@ pub async fn start_review_task(
                 );
             })?;
 
-        issues
-            .create_comment(discussion.pr_id, format!(
-                "**Triaged by {}:**\nThis PR requires a content review discussion, which will be held in {}.\n{}{}",
-                interaction.user.name,
-                if private { "private" } else { "public" },
-                if let Some(reasoning) = review_settings.reasoning {
-                    to_md_quote_block(reasoning)
-                } else
-                {
-                    String::new()
-                },
-                format!("The review duration has been set to {review_time_days} days.")
-            ))
-            .await
-            .map_err(|e| {
-                    error!(
-                    "Failed to comment about CR review on PR #{}: {e}",
-                    discussion.pr_id
-                    );
-
-                    return HandledError::UserfacingError("Failed to add GitHub comment.".into());
-                }
-            )?;
-
         let mut message = CreateMessage::new().add_embeds(vec![
             create_pr_embed(
                 discussion.pr_id,
@@ -209,6 +185,35 @@ pub async fn start_review_task(
                 );
 
                 HandledError::UserfacingError("Failed to create forum post.".into())
+            })?;
+
+        issues
+            .create_comment(
+                discussion.pr_id,
+                format!(
+                    r#"**Triaged by {}:**
+This PR requires a content review discussion, which will be held in {}.
+{}{}
+You can [view the discussion here]({}) and write comments starting with `!discord` to send messages into the thread."#,
+                    interaction.user.name,
+                    if private { "private" } else { "public" },
+                    if let Some(reasoning) = review_settings.reasoning {
+                        to_md_quote_block(reasoning)
+                    } else {
+                        String::new()
+                    },
+                    format!("https://discord.com/channels/{}/{}", new_thread.guild_id.get(), new_thread.id.get()),
+                    format!("The review duration has been set to {review_time_days} days."),
+                ),
+            )
+            .await
+            .map_err(|e| {
+                error!(
+                    "Failed to comment about CR review on PR #{}: {e}",
+                    discussion.pr_id
+                );
+
+                return HandledError::UserfacingError("Failed to add GitHub comment.".into());
             })?;
 
         let intake_thread = discussion.thread_id;
