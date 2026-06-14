@@ -63,8 +63,11 @@ pub enum GitHubMessage {
         issue_id: u64,
         username: String,
         comment: String,
+        /// Is the author also author of the PR?
         is_pr_author: bool,
-        is_maintainer: bool,
+        /// Is the author a maintainer, collaborator or member?
+        is_staff: bool,
+        /// Is the author a regular contributor or staff?
         is_contributor: bool,
     },
     PrLabeled {
@@ -223,10 +226,10 @@ async fn on_webhook_request(
             };
 
             let is_pr_author = c.comment.user.login == c.issue.user.login;
-            let is_maintainer = *association == AuthorAssociation::Collaborator
+            let is_staff = *association == AuthorAssociation::Collaborator
                 || *association == AuthorAssociation::Member
                 || *association == AuthorAssociation::Owner;
-            let is_contributor = is_maintainer || *association == AuthorAssociation::Contributor;
+            let is_contributor = is_staff || *association == AuthorAssociation::Contributor;
 
             let Some(body) = c.comment.body else {
                 error!("Received comment without body: {c:#?}");
@@ -240,7 +243,7 @@ async fn on_webhook_request(
                     username: c.comment.user.login,
                     comment: body,
                     is_pr_author,
-                    is_maintainer,
+                    is_staff,
                     is_contributor,
                 })
                 .await

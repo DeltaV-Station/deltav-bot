@@ -154,7 +154,7 @@ pub async fn cr_github_task(
                 username,
                 comment,
                 is_pr_author,
-                is_maintainer,
+                is_staff: is_maintainer,
                 is_contributor,
             } => {
                 let comment_lower = comment.to_ascii_lowercase();
