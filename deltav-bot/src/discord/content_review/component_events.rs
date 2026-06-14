@@ -193,8 +193,9 @@ pub async fn start_review_task(
                 format!(
                     r#"**Triaged by {}:**
 This PR requires a content review discussion, which will be held in {}.
-{}{}
-You can [view the discussion here]({}) and write comments starting with `!discord` to send messages into the thread."#,
+{}
+You can [view the discussion here]({}) and write comments starting with `!discord` to send messages into the thread.
+{}"#,
                     interaction.user.name,
                     if private { "private" } else { "public" },
                     if let Some(reasoning) = review_settings.reasoning {
