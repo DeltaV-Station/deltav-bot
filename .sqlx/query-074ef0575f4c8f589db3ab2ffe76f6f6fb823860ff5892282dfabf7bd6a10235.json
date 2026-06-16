@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM pr_dashboard_pending_drafts WHERE pr_id = ?1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "074ef0575f4c8f589db3ab2ffe76f6f6fb823860ff5892282dfabf7bd6a10235"
+}

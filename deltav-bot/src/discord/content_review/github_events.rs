@@ -22,7 +22,7 @@ use crate::{
             },
             discussion_channel_to_guild,
         },
-        pr_feeds::data::PrFeeds,
+        pr_feeds::data::PrDashboards,
     },
     github::{GitHub, GitHubMessage},
 };
@@ -37,7 +37,7 @@ pub async fn cr_github_task(
     db: Pool<Sqlite>,
     gh: Arc<GitHub>,
     config: CrConfig,
-    pr_feeds: PrFeeds,
+    pr_feeds: PrDashboards,
 ) {
     'outer: while let Some(message) = receiver.lock().await.recv().await {
         match message {

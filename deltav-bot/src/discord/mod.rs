@@ -18,7 +18,7 @@ use crate::{
             data::{PermissionFlags, Permissions},
             perms,
         },
-        pr_feeds::{data::PrFeeds, pr_feeds},
+        pr_feeds::{data::PrDashboards, pr_feeds},
     },
     github::{GitHub, GitHubMessage},
 };
@@ -36,7 +36,7 @@ struct Data {
     // TODO: need to use the receiver in the event handler, which receives a read-only ref. there's probably a more sane way to do this, but it works for now.
     gh_receiver: Arc<Mutex<Receiver<GitHubMessage>>>,
     cr_config: CrConfig,
-    pr_feeds: PrFeeds,
+    pr_feeds: PrDashboards,
 }
 type Error = Box<dyn std::error::Error + Send + Sync>;
 type Context<'a> = poise::Context<'a, Data, Error>;
@@ -78,7 +78,7 @@ pub async fn initialize(
                 Ok(Data {
                     gh: Arc::new(github),
                     permissions: Permissions::new(db.clone()),
-                    pr_feeds: PrFeeds::from_db(db.clone())
+                    pr_feeds: PrDashboards::from_db(db.clone())
                         .await
                         .expect("Failed initial PR Feeds load"),
                     cr_config: CrConfig::from_db(db.clone())

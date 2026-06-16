@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT * FROM prfeeds;",
+  "query": "SELECT * FROM pr_dashboards;",
   "describe": {
     "columns": [
       {
@@ -34,5 +34,5 @@
       true
     ]
   },
-  "hash": "63423bfee0ceec3ba94800242781c420b02407d02869819bbaf21cb3e447938e"
+  "hash": "c54801ae0819bf3c3824aa539b35570b77630bf733e5419ddd1f7bd98bcddfcc"
 }

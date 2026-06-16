@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "INSERT INTO prfeeds(gh_label, channel_id, ping_role) VALUES(?1,?2,?3) RETURNING *",
+  "query": "INSERT INTO pr_dashboards(gh_label, channel_id, ping_role) VALUES(?1,?2,?3) RETURNING *",
   "describe": {
     "columns": [
       {
@@ -34,5 +34,5 @@
       true
     ]
   },
-  "hash": "bd2bab13876b8cf22e9ba3dea12acfc19a9ef62b4e8c98d13e78c128e8b452eb"
+  "hash": "588d18c410e3f85b7d2e7dc4cbfa71e17f641c33b63afb85830dd72e83d450c6"
 }

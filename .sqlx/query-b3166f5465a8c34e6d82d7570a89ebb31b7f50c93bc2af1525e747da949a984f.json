@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM pr_dashboard_messages WHERE dashboard_id = ?1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "b3166f5465a8c34e6d82d7570a89ebb31b7f50c93bc2af1525e747da949a984f"
+}

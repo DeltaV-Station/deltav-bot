@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO pr_dashboard_pending_drafts(pr_id, dashboard_id) VALUES(?1, ?2)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "997523463b78b21ef9095f64eae782115a339ea93d0c74693e2734258cccb486"
+}
