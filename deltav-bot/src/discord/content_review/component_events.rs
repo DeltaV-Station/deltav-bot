@@ -516,7 +516,20 @@ async fn mute_reminders_task(
     db: Pool<Sqlite>,
 ) {
     match discussion.disable_reminders(&db).await {
-        Ok(()) => {
+        Ok(was_active) => {
+            if !was_active {
+                let _ = interaction
+                    .create_response(
+                        &ctx,
+                        CreateInteractionResponse::Message(
+                            CreateInteractionResponseMessage::new()
+                                .ephemeral(true)
+                                .content("Reminders have already been disabled for this PR."),
+                        ),
+                    )
+                    .await;
+                return;
+            }
             let message = format!(
                 "{} disabled reminders for PR #{}.",
                 interaction.user.name, discussion.pr_id

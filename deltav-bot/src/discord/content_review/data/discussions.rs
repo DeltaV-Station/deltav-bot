@@ -287,7 +287,11 @@ impl DiscussionRecord {
         }
     }
 
-    pub async fn disable_reminders(&mut self, db: &Pool<Sqlite>) -> Result<(), HandledError> {
+    pub async fn disable_reminders(&mut self, db: &Pool<Sqlite>) -> Result<bool, HandledError> {
+        if self.review_days_next_micros.is_none() {
+            return Ok(false);
+        }
+
         let pr_id_s = self.pr_id.cast_signed();
 
         match sqlx::query!(
@@ -302,7 +306,7 @@ impl DiscussionRecord {
         {
             Ok(_) => {
                 self.review_days_next_micros = None;
-                Ok(())
+                Ok(true)
             }
             Err(e) => {
                 error!("Failed to null next day micros for discussion {self:?}: {e}");
