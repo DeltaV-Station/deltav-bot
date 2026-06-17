@@ -20,7 +20,7 @@ use serde::Deserialize;
 use tokio::{net::TcpListener, sync::mpsc, task::JoinHandle};
 use tracing::{error, info, warn};
 
-use crate::consts::HTML_COMMENT_REGEX;
+use crate::util::remove_html_comments;
 
 pub struct GhAppConfig {
     pub id: AppId,
@@ -177,7 +177,7 @@ async fn on_webhook_request(
                             pr_title: title,
                             pr_body: p.pull_request.body.and_then(|x| {
                                 // multiple long HTML comments in PR template will clutter the embed
-                                Some(HTML_COMMENT_REGEX.replace_all(&x, "").to_string())
+                                Some(remove_html_comments(x))
                             }),
                             opened_by: sender_login,
                         })

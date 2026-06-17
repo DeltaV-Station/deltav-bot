@@ -9,7 +9,6 @@ use tokio::sync::{Mutex, mpsc::Receiver};
 use tracing::{error, info, warn};
 
 use crate::{
-    consts::HTML_COMMENT_REGEX,
     discord::{
         EMBED_DESC_MAX_LEN,
         content_review::{
@@ -25,6 +24,7 @@ use crate::{
         pr_feeds::data::PrDashboards,
     },
     github::{GitHub, GitHubMessage},
+    util::remove_html_comments,
 };
 
 const GH_COMMENT_COMMAND: &'static str = "!discord";
@@ -215,7 +215,7 @@ pub async fn cr_github_task(
                         pr.user
                             .and_then(|x| Some(x.login))
                             .unwrap_or("Unknown".into()),
-                        pr.body,
+                        pr.body.and_then(|x| Some(remove_html_comments(x))),
                         &gh,
                         &db,
                     )
@@ -425,9 +425,7 @@ pub async fn cr_github_task(
                     pr_id,
                     issue.title,
                     issue.user.login,
-                    issue
-                        .body
-                        .and_then(|x| Some(HTML_COMMENT_REGEX.replace_all(&x, "").to_string())),
+                    issue.body.and_then(|x| Some(remove_html_comments(x))),
                     &gh,
                 ));
 

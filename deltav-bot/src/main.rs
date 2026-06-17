@@ -8,9 +8,9 @@ use tracing::{error, info};
 
 use crate::github::{GhAppConfig, GitHub};
 
-mod consts;
 mod discord;
 mod github;
+mod util;
 
 macro_rules! required_env {
     ($variable_name: expr, $local_var: ident) => {
