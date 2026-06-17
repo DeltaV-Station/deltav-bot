@@ -36,6 +36,7 @@ pub struct GitHub {
     pub repo_owner: String,
     pub repo_name: String,
     pub repo: RepositoryId,
+    pub bot_name: String,
 }
 
 pub struct WebhookServer {
@@ -323,6 +324,35 @@ impl GitHub {
         .installation(install.id)
         .expect("Successfully authorized as GitHub App before. The installation call only returns an error if cached auth data is missing, this shouldn't be happening.");
 
+        info!("Fetching app info.");
+
+        let app = match octo.current().app().await {
+            Ok(x) => x,
+            Err(e) => {
+                error!("Failed to get app info: {e:#?}");
+                return Err(());
+            }
+        };
+
+        // TODO: For reasons unbeknownst to me octo.current().user() gets 401 or 403 response with octo or octo_install respectively.
+        //       maybe it doesn't actually contain data about the bot user, but the user that installed the app? don't know, but i'll
+        //       have to get the bot name from the app slug, which is not marked as required in the spec.
+        //       getting that in responses for my test install at least.
+        //
+        //       there is performed_via_github_app in webhook responses, but as far as i can tell octocrab
+        //       doesn't actually expose this information.
+        let bot_name = match app.slug {
+            Some(x) => x,
+            None => {
+                error!(
+                    "App slug was None! The bot would be unable to detect events triggered by itself. Aborting."
+                );
+                return Err(());
+            }
+        } + "[bot]";
+
+        info!("Bot name derived from app slug is '{bot_name}'.");
+
         let repo = match octo_install
             .repos(&app_config.repo_owner, &app_config.repo_name)
             .get()
@@ -351,6 +381,7 @@ impl GitHub {
                 repo_owner: app_config.repo_owner,
                 repo_name: app_config.repo_name,
                 repo,
+                bot_name,
             },
         ))
     }

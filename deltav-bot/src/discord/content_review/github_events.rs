@@ -47,6 +47,10 @@ pub async fn cr_github_task(
                 pr_body,
                 opened_by,
             } => {
+                if opened_by == gh.bot_name {
+                    continue;
+                }
+
                 if config
                     .ignored
                     .is_ignored(IgnoredKind::Author, &opened_by)
@@ -157,6 +161,10 @@ pub async fn cr_github_task(
                 is_staff: is_maintainer,
                 is_contributor,
             } => {
+                if username == gh.bot_name {
+                    continue;
+                }
+
                 let comment_lower = comment.to_ascii_lowercase();
                 if comment_lower.starts_with(GH_COMMENT_COMMAND) {
                     if !is_maintainer && !is_pr_author {
@@ -216,6 +224,10 @@ pub async fn cr_github_task(
             }
 
             GitHubMessage::PrClosed { pr_id, closed_by } => {
+                if closed_by == gh.bot_name {
+                    continue;
+                }
+
                 let Some(discussion) = DiscussionRecord::get_by_pr(&db, pr_id).await else {
                     continue;
                 };
@@ -281,6 +293,10 @@ pub async fn cr_github_task(
             }
 
             GitHubMessage::PrMerged { pr_id, merged_by } => {
+                if merged_by == gh.bot_name {
+                    continue;
+                }
+
                 let Some(discussion) = DiscussionRecord::get_by_pr(&db, pr_id).await else {
                     continue;
                 };
@@ -346,6 +362,10 @@ pub async fn cr_github_task(
             }
 
             GitHubMessage::PrDrafted { pr_id, drafted_by } => {
+                if drafted_by == gh.bot_name {
+                    continue;
+                }
+
                 let Some(discussion) = DiscussionRecord::get_by_pr(&db, pr_id).await else {
                     continue;
                 };
