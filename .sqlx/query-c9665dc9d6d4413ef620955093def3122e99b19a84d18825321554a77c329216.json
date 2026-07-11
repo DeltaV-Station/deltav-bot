@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT * FROM cr_discussions WHERE thread_id = ?1",
+  "query": "SELECT * FROM cr_discussions WHERE \"thread_id!\" = ?1",
   "describe": {
     "columns": [
       {
@@ -53,7 +53,7 @@
       "Right": 1
     },
     "nullable": [
-      true,
+      false,
       false,
       false,
       true,
@@ -64,5 +64,5 @@
       true
     ]
   },
-  "hash": "f93b62a762fa71657344507768837cea862626fa18543dd4a7f277cdff4f3543"
+  "hash": "c9665dc9d6d4413ef620955093def3122e99b19a84d18825321554a77c329216"
 }
