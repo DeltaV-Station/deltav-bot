@@ -167,7 +167,7 @@ impl DiscussionRecord {
     ) -> Option<DiscussionRecord> {
         let thread_id_s = thread_id.get().cast_signed();
         match sqlx::query!(
-            "SELECT * FROM cr_discussions WHERE thread_id = ?1",
+            "SELECT * FROM cr_discussions WHERE \"thread_id!\" = ?1",
             thread_id_s
         )
         .fetch_one(db)
@@ -175,10 +175,7 @@ impl DiscussionRecord {
         {
             Ok(r) => Some(DiscussionRecord {
                 forum_id: ChannelId::new(r.forum_id.cast_unsigned()),
-                pr_id: r
-                    .pr_id
-                    .expect("primary key of record was null. this should not be possible.") // TODO: This suddenly started being returned as an Option. I have no idea why.
-                    .cast_unsigned(),
+                pr_id: r.pr_id.cast_unsigned(),
                 thread_id: ChannelId::new(r.thread_id.cast_unsigned()),
                 review_days_total: r.review_days_total.and_then(|x| Some(x.cast_unsigned())),
                 review_days_passed: r.review_days_passed.and_then(|x| Some(x.cast_unsigned())),
