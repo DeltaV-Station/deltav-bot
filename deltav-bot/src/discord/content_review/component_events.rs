@@ -5,7 +5,7 @@ use poise::{
     Modal, execute_modal_on_component_interaction,
     serenity_prelude::{
         ComponentInteraction, ComponentInteractionCollector, ComponentInteractionDataKind,
-        CreateAllowedMentions, CreateForumPost, CreateInteractionResponse,
+        CreateAllowedMentions, CreateEmbed, CreateForumPost, CreateInteractionResponse,
         CreateInteractionResponseMessage, CreateMessage, EditInteractionResponse,
     },
 };
@@ -154,13 +154,21 @@ pub async fn start_review_task(
                 discussion.pr_author.clone(),
                 discussion.pr_body.clone(),
                 &gh,
-            )
-            .field(
-                "Review duration",
-                format!("{} days", review_time_days),
-                true,
-            )
-            .field("Due", format!("<t:{}:R>", due_at.timestamp()), true),
+            ),
+            CreateEmbed::new()
+                .title(format!("Triaged by {}", interaction.user.name))
+                .description(
+                    review_settings
+                        .reasoning
+                        .clone()
+                        .unwrap_or("*No reasoning provided.*".into()),
+                )
+                .field(
+                    "Review duration",
+                    format!("{} days", review_time_days),
+                    true,
+                )
+                .field("Due", format!("<t:{}:R>", due_at.timestamp()), true),
         ]);
 
         if let Some(ping_role) = config.get_review_ping_role().await {
