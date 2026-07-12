@@ -1,5 +1,5 @@
 use chrono::{Days, Utc};
-use poise::serenity_prelude::ChannelId;
+use poise::serenity_prelude::{ChannelId, MessageId, UserId};
 use sqlx::{Pool, Sqlite, query};
 use tracing::{error, warn};
 
@@ -321,5 +321,192 @@ impl DiscussionRecord {
     fn get_next_micros() -> i64 {
         let next_day = Utc::now().checked_add_days(Days::new(1)).unwrap();
         next_day.timestamp_micros()
+    }
+
+    pub async fn get_raised_issues(
+        &self,
+        db: &Pool<Sqlite>,
+    ) -> Result<Vec<(UserId, MessageId)>, HandledError> {
+        let pr_id_s = self.pr_id.cast_signed();
+        match sqlx::query!("SELECT * FROM cr_raised_issues WHERE pr_id = ?1", pr_id_s)
+            .fetch_all(db)
+            .await
+        {
+            Ok(x) => Ok(x
+                .iter()
+                .map(|x| {
+                    (
+                        UserId::new(x.user_id.cast_unsigned()),
+                        MessageId::new(x.message_id.cast_unsigned()),
+                    )
+                })
+                .collect()),
+
+            Err(e) => {
+                error!("Failed to retrieve raised issues for {self:?}: {e}");
+                Err(HandledError::InternalError)
+            }
+        }
+    }
+
+    pub async fn upsert_issue(
+        &self,
+        db: &Pool<Sqlite>,
+        author: UserId,
+        message: MessageId,
+    ) -> Result<(), HandledError> {
+        let message_id_s = message.get().cast_signed();
+        let author_id_s = author.get().cast_signed();
+        let pr_id_s = self.pr_id.cast_signed();
+
+        if let Err(e) = sqlx::query!(
+            "INSERT INTO cr_raised_issues(pr_id, user_id, message_id) VALUES(?1, ?2, ?3) ON CONFLICT(pr_id, user_id) DO UPDATE SET message_id = excluded.message_id",
+            pr_id_s,
+            author_id_s,
+            message_id_s
+        )
+        .execute(db)
+        .await
+{
+                error!("Failed to upsert issue with message {message} by {author_id_s} for {self:?}: {e}");
+                return Err(HandledError::InternalError);
+        }
+
+        if let Err(e) = sqlx::query!(
+            "DELETE FROM cr_raised_issues_overrides WHERE pr_id = ?1 AND issue_user_id = ?2",
+            pr_id_s,
+            author_id_s,
+        )
+        .execute(db)
+        .await
+        {
+            error!("Failed to delete outdated issue overrides for {self:?}: {e}");
+            return Err(HandledError::InternalError);
+        }
+        Ok(())
+    }
+
+    pub async fn upsert_issue_override(
+        &self,
+        db: &Pool<Sqlite>,
+        issue_author: UserId,
+        override_author: UserId,
+        override_message: MessageId,
+    ) -> Result<(), HandledError> {
+        let pr_id_s = self.pr_id.cast_signed();
+        let issue_author_id_s = issue_author.get().cast_signed();
+        let override_author_id_s = override_author.get().cast_signed();
+        let override_message_id_s = override_message.get().cast_signed();
+
+        if let Err(e) = sqlx::query!(
+            "INSERT INTO cr_raised_issues_overrides(pr_id, issue_user_id, override_user_id, override_message_id) VALUES(?1, ?2, ?3, ?4) ON CONFLICT(pr_id, issue_user_id, override_user_id) DO UPDATE SET override_message_id = excluded.override_message_id",
+            pr_id_s,
+            issue_author_id_s,
+            override_author_id_s,
+            override_message_id_s
+        ).execute(db).await {
+            error!("Failed to upsert issue override by {override_author} for {issue_author}'s issue, part of {self:?}: {e}");
+
+            if let sqlx::Error::Database(e) = e {
+                if e.is_foreign_key_violation() {
+                    return Err(HandledError::UserfacingError("The specified user has not raised an issue.".into()))
+                }
+            }
+
+            return Err(HandledError::InternalError);
+        }
+
+        Ok(())
+    }
+
+    pub async fn get_issue_overrides(
+        &self,
+        db: &Pool<Sqlite>,
+        issue_author: UserId,
+    ) -> Result<Vec<(UserId, MessageId)>, HandledError> {
+        let pr_id_s = self.pr_id.cast_signed();
+        let issue_author_id_s = issue_author.get().cast_signed();
+        match sqlx::query!(
+            "SELECT override_user_id, override_message_id FROM cr_raised_issues_overrides WHERE pr_id = ?1 AND issue_user_id = ?2",
+            pr_id_s,
+            issue_author_id_s
+        )
+        .fetch_all(db)
+        .await
+        {
+            Ok(x) => Ok(x
+                .iter()
+                .map(|x| {
+                    (
+                        UserId::new(x.override_user_id.cast_unsigned()),
+                        MessageId::new(x.override_message_id.cast_unsigned()),
+                    )
+                })
+                .collect()),
+
+            Err(e) => {
+                error!("Failed to retrieve issues overrides for user {issue_author} regarding {self:?}: {e}");
+                Err(HandledError::InternalError)
+            }
+        }
+    }
+
+    pub async fn get_issue_override(
+        &self,
+        db: &Pool<Sqlite>,
+        issue_author: UserId,
+        override_author: UserId,
+    ) -> Result<Option<MessageId>, HandledError> {
+        let pr_id_s = self.pr_id.cast_signed();
+        let issue_author_id_s = issue_author.get().cast_signed();
+        let override_author_id_s = override_author.get().cast_signed();
+
+        match sqlx::query!(
+            "SELECT override_message_id FROM cr_raised_issues_overrides WHERE pr_id = ?1 AND issue_user_id = ?2 AND override_user_id = ?3",
+            pr_id_s,
+            issue_author_id_s,
+            override_author_id_s
+        ).fetch_one(db).await {
+            Ok(x) => Ok(Some(MessageId::new(x.override_message_id.cast_unsigned()))),
+            Err(e) => {
+                if let sqlx::Error::RowNotFound = e {
+                    return Ok(None);
+                }
+
+                error!("Failed to retrieve issue override by {override_author} regarding issue by {issue_author} on PR#{}: {e}", self.pr_id);
+                Err(HandledError::InternalError)
+            }
+        }
+    }
+
+    pub async fn get_issue(
+        &self,
+        db: &Pool<Sqlite>,
+        issue_author: UserId,
+    ) -> Result<Option<MessageId>, HandledError> {
+        let pr_id_s = self.pr_id.cast_signed();
+        let issue_author_id_s = issue_author.get().cast_signed();
+
+        match sqlx::query!(
+            "SELECT message_id FROM cr_raised_issues WHERE pr_id = ?1 AND user_id = ?2",
+            pr_id_s,
+            issue_author_id_s,
+        )
+        .fetch_one(db)
+        .await
+        {
+            Ok(x) => Ok(Some(MessageId::new(x.message_id.cast_unsigned()))),
+            Err(e) => {
+                if let sqlx::Error::RowNotFound = e {
+                    return Ok(None);
+                }
+
+                error!(
+                    "Failed to retrieve issue raised by {issue_author} on PR#{}: {e}",
+                    self.pr_id
+                );
+                Err(HandledError::InternalError)
+            }
+        }
     }
 }

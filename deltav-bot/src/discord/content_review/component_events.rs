@@ -497,11 +497,7 @@ pub async fn cr_component_task(
                         ));
                     }
 
-                    action => {
-                        error!("Received button press with invalid action {}", action);
-                        let _ = interaction.create_response(&ctx, error_response).await;
-                        continue;
-                    }
+                    _ => continue,
                 }
             }
             _ => {}

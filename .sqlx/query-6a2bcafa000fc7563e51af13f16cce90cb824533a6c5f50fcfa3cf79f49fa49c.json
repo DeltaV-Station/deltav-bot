@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT message_id FROM cr_raised_issues WHERE pr_id = ?1 AND user_id = ?2",
+  "describe": {
+    "columns": [
+      {
+        "name": "message_id",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "6a2bcafa000fc7563e51af13f16cce90cb824533a6c5f50fcfa3cf79f49fa49c"
+}

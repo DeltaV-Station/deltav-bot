@@ -26,6 +26,8 @@ pub mod data;
 pub mod github_events;
 pub mod timers;
 
+pub mod raised_issues;
+
 pub const INTERACTION_ID_PREFIX: &'static str = "cr";
 pub const BUTTON_ID_ACTION_START_PUBLIC: &'static str = "reviewStartPublic";
 pub const BUTTON_ID_ACTION_START_PRIVATE: &'static str = "reviewStartPrivate";
@@ -89,7 +91,7 @@ async fn discussion_channel_to_guild(
         "cr_config",
         "cr_complete",
         "cr_request_changes",
-        "cr_ignored"
+        "cr_ignored",
     )
 )]
 pub async fn cr(_ctx: Context<'_>) -> Result<(), Error> {

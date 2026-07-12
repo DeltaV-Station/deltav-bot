@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM cr_raised_issues_overrides WHERE pr_id = ?1 AND issue_user_id = ?2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "0e2cf2faa12129b03c2c5f6b58d16888cc5cf992a054556149100434bffdba3c"
+}

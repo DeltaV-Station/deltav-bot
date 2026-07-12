@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use poise::serenity_prelude::{self as serenity, GatewayIntents};
+use poise::serenity_prelude::{self as serenity, GatewayIntents, MessageType};
 use sqlx::{Pool, Sqlite};
 use tokio::{
     sync::{Mutex, mpsc::Receiver},
@@ -11,8 +11,12 @@ use tracing::{error, info};
 use crate::{
     discord::{
         content_review::{
-            component_events::cr_component_task, cr, data::config::CrConfig,
-            github_events::cr_github_task, timers::cr_timers_task,
+            component_events::cr_component_task,
+            cr,
+            data::config::CrConfig,
+            github_events::cr_github_task,
+            raised_issues::{cr_issue_override, cr_issue_raise, cr_issue_view},
+            timers::cr_timers_task,
         },
         permissions::{
             data::{PermissionFlags, Permissions},
@@ -66,7 +70,14 @@ pub async fn initialize(
     info!("Initializing framework.");
     let framework = poise::Framework::builder()
         .options(poise::FrameworkOptions {
-            commands: vec![cr(), perms(), pr_feeds()],
+            commands: vec![
+                cr(),
+                perms(),
+                pr_feeds(),
+                cr_issue_raise(),
+                cr_issue_override(),
+                cr_issue_view(),
+            ],
             event_handler: |ctx, event, framework, data| {
                 Box::pin(event_handler(ctx, event, framework, data))
             },
@@ -91,7 +102,7 @@ pub async fn initialize(
         })
         .build();
 
-    let intents = GatewayIntents::GUILD_MESSAGES;
+    let intents = GatewayIntents::GUILD_MESSAGES | GatewayIntents::MESSAGE_CONTENT;
     let mut client = match serenity::ClientBuilder::new(token, intents)
         .framework(framework)
         .await
@@ -115,7 +126,7 @@ pub async fn initialize(
 async fn event_handler(
     ctx: &serenity::Context,
     event: &serenity::FullEvent,
-    _framework: poise::FrameworkContext<'_, Data, Error>,
+    framework: poise::FrameworkContext<'_, Data, Error>,
     data: &Data,
 ) -> Result<(), Error> {
     match event {
@@ -147,6 +158,21 @@ async fn event_handler(
                 data.db.clone(),
                 data.cr_config.clone(),
             ));
+        }
+
+        serenity::FullEvent::Message { new_message } => {
+            if new_message.author.id != framework.bot_id {
+                return Ok(());
+            }
+
+            if new_message.kind == MessageType::PinsAdd {
+                if let Err(e) = new_message.delete(ctx).await {
+                    error!(
+                        "Unable to delete own pin message {} in channel {}: {e:#?}",
+                        new_message.id, new_message.channel_id
+                    );
+                }
+            }
         }
         _ => {}
     }
