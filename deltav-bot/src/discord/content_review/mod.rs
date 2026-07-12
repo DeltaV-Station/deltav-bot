@@ -63,7 +63,7 @@ struct RequestChangesModal {
     description: String,
 }
 
-async fn discussion_channel_to_guild(
+pub async fn discussion_channel_to_guild(
     pr_id: u64,
     id: ChannelId,
     ctx: &poise::serenity_prelude::Context,

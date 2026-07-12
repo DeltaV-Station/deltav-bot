@@ -6,9 +6,13 @@ use sqlx::{Pool, Sqlite};
 use tokio::time::sleep;
 use tracing::{error, info};
 
-use crate::discord::content_review::{
-    BUTTON_ID_ACTION_MUTE_REMINDERS, HandledError, INTERACTION_ID_PREFIX,
-    data::{config::CrConfig, discussions::DiscussionRecord},
+use crate::discord::{
+    EMBED_DESC_MAX_LEN,
+    content_review::{
+        BUTTON_ID_ACTION_MUTE_REMINDERS, HandledError, INTERACTION_ID_PREFIX,
+        data::{config::CrConfig, discussions::DiscussionRecord},
+        discussion_channel_to_guild,
+    },
 };
 
 pub async fn cr_timers_task(
@@ -75,6 +79,63 @@ pub async fn cr_timers_task(
 
             if let Err(e) = discussion.thread_id.send_message(&ctx, message).await {
                 error!("Failed to send review timer notification for {discussion:?}: {e}")
+            }
+
+            let mut message = CreateMessage::new();
+            let issues = match discussion.get_raised_issues(&db).await {
+                Ok(x) => x,
+                Err(e) => {
+                    error!(
+                        "Failed to fetch raised issues to build embeds for reminder regarding {discussion:?}: {e}"
+                    );
+                    continue;
+                }
+            };
+
+            // TODO: Pass this in from somewhere so it doesn't have to be resolved here
+            let guild_id =
+                discussion_channel_to_guild(discussion.pr_id, discussion.thread_id, &ctx)
+                    .await
+                    .and_then(|x| Some(x.guild_id));
+
+            for (idx, (user, issue)) in issues.iter().enumerate() {
+                let mut embed = CreateEmbed::new()
+                    .url(issue.link(discussion.thread_id, guild_id))
+                    .title(format!("Issue #{idx}"))
+                    .field("Author", format!("<@{user}>"), true);
+
+                let overrides_list = match discussion.get_issue_overrides(&db, *user).await {
+                    Ok(overrides) => {
+                        embed = embed.field("Total overrides", overrides.len().to_string(), true);
+                        if overrides.is_empty() {
+                            String::from("*No votes to override.*\n")
+                        } else {
+                            let mut out = String::from("Overrides:\n");
+                            for (override_user, override_message) in overrides {
+                                out += &format!(
+                                    "- <@{override_user}>\n  - {}\n",
+                                    override_message.link(discussion.thread_id, guild_id)
+                                );
+                            }
+                            out
+                        }
+                    }
+                    Err(e) => {
+                        format!("Failed to retrieve: *{e}*\n")
+                    }
+                };
+
+                embed = embed.description(
+                    overrides_list
+                        .chars()
+                        .take(EMBED_DESC_MAX_LEN)
+                        .collect::<String>(), // I am going to naively assume here that the list will not reach 4096 characters. If it does happen I will need to rewrite this to process it in chunks.
+                );
+                message = message.add_embed(embed);
+            }
+
+            if let Err(e) = discussion.thread_id.send_message(&ctx, message).await {
+                error!("Failed to send issue summary for {discussion:?}: {e}")
             }
         }
 
