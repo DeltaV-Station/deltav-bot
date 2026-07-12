@@ -332,7 +332,7 @@ pub async fn cr_complete(
             format!(
                 "**CR consensus: {}**\n{}Review closed by {}.",
                 outcome.name(),
-                if let Some(comment) = comment {
+                if let Some(comment) = &comment {
                     to_md_quote_block(comment)
                 } else {
                     String::new()
@@ -351,10 +351,17 @@ pub async fn cr_complete(
         return Ok(());
     };
 
-    ctx.reply(format!(
-        "This discussion has been closed: **{}**.",
-        outcome.name()
-    ))
+    ctx.send(
+        CreateReply::default().embed(
+            CreateEmbed::new()
+                .title(format!("Discussion closed: {}", outcome.name()))
+                .description(comment.unwrap_or("*No reasoning provided.*".into()))
+                .footer(CreateEmbedFooter::new(format!(
+                    "Closed by {}",
+                    ctx.author().name
+                ))),
+        ),
+    )
     .await?;
 
     let tag = match outcome {
