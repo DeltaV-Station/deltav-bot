@@ -211,6 +211,23 @@ pub async fn cr_issue_override(ctx: Context<'_>, message: Message) -> Result<(),
     let issue_author =
         issue_author.expect("If no valid user was provided, we should've already returned");
 
+    match discussion.get_issue(&ctx.data().db, issue_author).await {
+        Ok(Some(issue_message)) => {
+            if message.id == issue_message {
+                ctx.reply("You can't mark your issue as one of its overrides.")
+                    .await?;
+                return Ok(());
+            }
+        }
+        Ok(None) => (),
+        Err(e) => {
+            error!(
+                "Failed to get PR#{} issue for {issue_author} while trying to check against id of new override: {e}",
+                discussion.pr_id
+            );
+        }
+    }
+
     let old_message = match discussion
         .get_issue_override(&ctx.data().db, issue_author, ctx.author().id)
         .await
