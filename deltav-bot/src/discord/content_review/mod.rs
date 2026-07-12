@@ -365,16 +365,27 @@ pub async fn cr_complete(
         .edit_thread(
             &ctx,
             EditThread::new()
-                .archived(true)
                 .applied_tags(channel.applied_tags.iter().chain([tag].iter()).cloned()),
         )
         .await
     {
         error!(
-            "Failed to label and archive thread for PR#{} ({}): {e}",
+            "Failed to label thread for PR#{} ({}): {e}",
             discussion.pr_id, channel.id
         );
-        ctx.reply("Failed to label and archive thread. Lacking permissions.")
+        ctx.reply("Failed to label thread. Lacking permissions?")
+            .await?;
+    }
+
+    if let Err(e) = channel
+        .edit_thread(&ctx, EditThread::new().archived(true))
+        .await
+    {
+        error!(
+            "Failed to archive thread for PR#{} ({}): {e}",
+            discussion.pr_id, channel.id
+        );
+        ctx.reply("Failed to archive thread. Lacking permissions?")
             .await?;
     }
 
