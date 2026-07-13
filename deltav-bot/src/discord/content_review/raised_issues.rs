@@ -26,7 +26,7 @@ pub async fn cr_issue(_ctx: Context<'_>) -> Result<(), Error> {
 }
 
 #[poise::command(slash_command, rename = "overview", ephemeral)]
-// List all issues and overrides.
+/// List all issues and overrides.
 pub async fn cr_issue_overview(ctx: Context<'_>) -> Result<(), Error> {
     cr_issue_overview_impl(&ctx).await?;
     Ok(())
