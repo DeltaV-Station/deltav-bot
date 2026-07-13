@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE cr_discussions SET triaged_by=?1 WHERE pr_id = ?2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "93790913497fd8a6c50a9c4d0d5f5e0ca3ca01e9c2a7d61401d00ba78639bc84"
+}

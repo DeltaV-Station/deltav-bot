@@ -47,6 +47,11 @@
         "name": "pr_body",
         "ordinal": 8,
         "type_info": "Text"
+      },
+      {
+        "name": "triaged_by",
+        "ordinal": 9,
+        "type_info": "Integer"
       }
     ],
     "parameters": {
@@ -61,6 +66,7 @@
       true,
       false,
       false,
+      true,
       true
     ]
   },
