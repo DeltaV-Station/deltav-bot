@@ -4,9 +4,10 @@ use chrono::{Days, Utc};
 use poise::{
     Modal, execute_modal_on_component_interaction,
     serenity_prelude::{
-        ComponentInteraction, ComponentInteractionCollector, ComponentInteractionDataKind,
-        CreateAllowedMentions, CreateEmbed, CreateForumPost, CreateInteractionResponse,
-        CreateInteractionResponseMessage, CreateMessage, EditInteractionResponse,
+        ChannelId, ComponentInteraction, ComponentInteractionCollector,
+        ComponentInteractionDataKind, CreateAllowedMentions, CreateEmbed, CreateForumPost,
+        CreateInteractionResponse, CreateInteractionResponseFollowup,
+        CreateInteractionResponseMessage, CreateMessage,
     },
 };
 use sqlx::{Pool, Sqlite};
@@ -16,10 +17,11 @@ use crate::{
     discord::{
         content_review::{
             BUTTON_ID_ACTION_MUTE_REMINDERS, BUTTON_ID_ACTION_NOT_NEEDED,
-            BUTTON_ID_ACTION_START_PRIVATE, BUTTON_ID_ACTION_START_PUBLIC, HandledError,
-            INTERACTION_ID_PREFIX, create_pr_embed,
+            BUTTON_ID_ACTION_START_PRIVATE, BUTTON_ID_ACTION_START_PUBLIC,
+            BUTTON_ID_ACTION_VIEW_ISSUES, HandledError, INTERACTION_ID_PREFIX, create_pr_embed,
             data::{config::CrConfig, discussions::DiscussionRecord, forums::ForumRecord},
             discussion_channel_to_guild,
+            raised_issues::create_issue_overview_embeds,
         },
         permissions::{
             check_permissions_component,
@@ -61,10 +63,51 @@ impl<'a> AsRef<poise::serenity_prelude::Context> for CtxWrapper<'a> {
     }
 }
 
+/// returns (parent_forum, intake_forum, discussion)
+async fn triage_preamble(
+    pr_id: u64,
+    db: &Pool<Sqlite>,
+    ctx: &poise::serenity_prelude::Context,
+    config: &CrConfig,
+) -> Result<(ChannelId, ChannelId, DiscussionRecord), HandledError> {
+    let Some(discussion) = DiscussionRecord::get_by_pr(db, pr_id).await else {
+        error!("Received triage button press, but could not find discussion.");
+        return Err(HandledError::InternalError);
+    };
+
+    let Some(parent_forum) =
+        discussion_channel_to_guild(discussion.pr_id, discussion.thread_id, &ctx)
+            .await
+            .and_then(|x| x.parent_id)
+    else {
+        error!(
+            "Failed to get parent forum for discussion thread {}",
+            discussion.thread_id
+        );
+        return Err(HandledError::InternalError);
+    };
+
+    let Some(intake_forum) = config.get_intake_forum().await else {
+        error!("Can't process interaction without intake forum.");
+
+        return Err(HandledError::UserfacingError(
+            "Can't process triage button press with intake forum unset.".into(),
+        ));
+    };
+
+    if parent_forum != intake_forum {
+        error!("Received triage button press, but parent forum was not intake forum.");
+
+        return Err(HandledError::InternalError);
+    }
+
+    Ok((parent_forum, intake_forum, discussion))
+}
+
 pub async fn start_review_task(
     interaction: ComponentInteraction,
     ctx: poise::serenity_prelude::Context,
-    discussion: DiscussionRecord,
+    pr_id: u64,
     db: Pool<Sqlite>,
     config: CrConfig,
     gh: Arc<GitHub>,
@@ -73,12 +116,14 @@ pub async fn start_review_task(
     async fn inner(
         interaction: &ComponentInteraction,
         ctx: &poise::serenity_prelude::Context,
-        mut discussion: DiscussionRecord,
+        pr_id: u64,
         db: Pool<Sqlite>,
         config: CrConfig,
         gh: Arc<GitHub>,
         private: bool,
     ) -> Result<(), HandledError> {
+        let (_, _, mut discussion) = triage_preamble(pr_id, &db, ctx, &config).await?;
+
         let forum_channel = if private {
             config
                 .get_private_forum()
@@ -243,7 +288,7 @@ You can [view the discussion here]({}) and write comments starting with `!discor
         Ok(())
     }
 
-    match inner(&interaction, &ctx, discussion, db, config, gh, private).await {
+    match inner(&interaction, &ctx, pr_id, db, config, gh, private).await {
         Err(e) => {
             let _ = interaction
                 .create_response(
@@ -261,7 +306,7 @@ You can [view the discussion here]({}) and write comments starting with `!discor
 pub async fn no_review_needed_task(
     interaction: ComponentInteraction,
     ctx: poise::serenity_prelude::Context,
-    discussion: DiscussionRecord,
+    pr_id: u64,
     db: Pool<Sqlite>,
     config: CrConfig,
     gh: Arc<GitHub>,
@@ -269,11 +314,13 @@ pub async fn no_review_needed_task(
     async fn inner(
         interaction: &ComponentInteraction,
         ctx: &poise::serenity_prelude::Context,
-        discussion: DiscussionRecord,
+        pr_id: u64,
         db: Pool<Sqlite>,
         config: CrConfig,
         gh: Arc<GitHub>,
     ) -> Result<(), HandledError> {
+        let (_, _, discussion) = triage_preamble(pr_id, &db, ctx, &config).await?;
+
         let no_review_needed_label =
             config
                 .get_no_review_needed_label()
@@ -325,7 +372,7 @@ pub async fn no_review_needed_task(
         Ok(())
     }
 
-    match inner(&interaction, &ctx, discussion, db, config, gh).await {
+    match inner(&interaction, &ctx, pr_id, db, config, gh).await {
         Err(e) => {
             let _ = interaction
                 .create_response(
@@ -380,13 +427,6 @@ pub async fn cr_component_task(
                     continue;
                 };
 
-                let Some(discussion) = DiscussionRecord::get_by_pr(&db, pr_id).await else {
-                    error!("Received button press {id_parts:?}, but could not find discussion.");
-                    let _ = interaction.create_response(&ctx, error_response).await;
-
-                    continue;
-                };
-
                 let check = check_permissions_component(
                     &ctx,
                     &interaction,
@@ -398,48 +438,17 @@ pub async fn cr_component_task(
                     continue;
                 }
 
-                let Some(parent_forum) =
-                    discussion_channel_to_guild(pr_id, discussion.thread_id, &ctx)
-                        .await
-                        .and_then(|x| x.parent_id)
-                else {
-                    error!(
-                        "Failed to get parent forum for discussion thread {}",
-                        discussion.thread_id
-                    );
-                    let _ = interaction.create_response(&ctx, error_response).await;
-
-                    continue;
-                };
-
-                let Some(intake_forum) = config.get_intake_forum().await else {
-                    error!("Can't process interaction without intake forum.");
-                    let _ = interaction
-                        .edit_response(
-                            &ctx,
-                            EditInteractionResponse::new()
-                                .content("Can't process CR interaction with intake forum unset."),
-                        )
-                        .await;
-
-                    continue;
-                };
+                info!(
+                    "{} ({}) has pressed button {id_parts:?}",
+                    interaction.user.name, interaction.user.id
+                );
 
                 match id_parts[1] {
                     BUTTON_ID_ACTION_START_PUBLIC => {
-                        if parent_forum != intake_forum {
-                            error!(
-                                "Received button press {id_parts:?}, but parent forum was not intake forum."
-                            );
-                            let _ = interaction.create_response(&ctx, error_response).await;
-
-                            continue;
-                        }
-
                         tokio::spawn(start_review_task(
                             interaction,
                             ctx.clone(),
-                            discussion,
+                            pr_id,
                             db.clone(),
                             config.clone(),
                             gh.clone(),
@@ -448,19 +457,10 @@ pub async fn cr_component_task(
                     }
 
                     BUTTON_ID_ACTION_START_PRIVATE => {
-                        if parent_forum != intake_forum {
-                            error!(
-                                "Received button press {id_parts:?}, but parent forum was not intake forum."
-                            );
-                            let _ = interaction.create_response(&ctx, error_response).await;
-
-                            continue;
-                        }
-
                         tokio::spawn(start_review_task(
                             interaction,
                             ctx.clone(),
-                            discussion,
+                            pr_id,
                             db.clone(),
                             config.clone(),
                             gh.clone(),
@@ -469,19 +469,10 @@ pub async fn cr_component_task(
                     }
 
                     BUTTON_ID_ACTION_NOT_NEEDED => {
-                        if parent_forum != intake_forum {
-                            error!(
-                                "Received button press {id_parts:?}, but parent forum was not intake forum."
-                            );
-                            let _ = interaction.create_response(&ctx, error_response).await;
-
-                            continue;
-                        }
-
                         tokio::spawn(no_review_needed_task(
                             interaction,
                             ctx.clone(),
-                            discussion,
+                            pr_id,
                             db.clone(),
                             config.clone(),
                             gh.clone(),
@@ -489,18 +480,19 @@ pub async fn cr_component_task(
                     }
 
                     BUTTON_ID_ACTION_MUTE_REMINDERS => {
-                        if let None = ForumRecord::get_by_channel(&db, parent_forum).await {
-                            error!(
-                                "Received button press {id_parts:?}, but parent forum was not registered."
-                            );
-                            let _ = interaction.create_response(&ctx, error_response).await;
-                            continue;
-                        }
-
                         tokio::spawn(mute_reminders_task(
                             interaction,
                             ctx.clone(),
-                            discussion,
+                            db.clone(),
+                            pr_id,
+                        ));
+                    }
+
+                    BUTTON_ID_ACTION_VIEW_ISSUES => {
+                        tokio::spawn(view_issues_task(
+                            interaction,
+                            ctx.clone(),
+                            pr_id,
                             db.clone(),
                         ));
                     }
@@ -516,9 +508,42 @@ pub async fn cr_component_task(
 async fn mute_reminders_task(
     interaction: ComponentInteraction,
     ctx: poise::serenity_prelude::Context,
-    mut discussion: DiscussionRecord,
     db: Pool<Sqlite>,
+    pr_id: u64,
 ) {
+    let Some(mut discussion) = DiscussionRecord::get_by_pr(&db, pr_id).await else {
+        let _ = interaction
+            .create_response(&ctx, CreateInteractionResponse::Acknowledge)
+            .await;
+
+        return;
+    };
+
+    let Some(parent_forum) =
+        discussion_channel_to_guild(discussion.pr_id, discussion.thread_id, &ctx)
+            .await
+            .and_then(|x| x.parent_id)
+    else {
+        error!(
+            "Failed to get parent forum for discussion thread {}",
+            discussion.thread_id
+        );
+
+        let _ = interaction
+            .create_response(&ctx, CreateInteractionResponse::Acknowledge)
+            .await;
+        return;
+    };
+
+    if let None = ForumRecord::get_by_channel(&db, parent_forum).await {
+        error!("Received mute reminders button press, but parent forum was not registered.");
+
+        let _ = interaction
+            .create_response(&ctx, CreateInteractionResponse::Acknowledge)
+            .await;
+        return;
+    }
+
     match discussion.disable_reminders(&db).await {
         Ok(was_active) => {
             if !was_active {
@@ -564,5 +589,80 @@ async fn mute_reminders_task(
                 )
                 .await;
         }
+    }
+}
+
+pub async fn view_issues_task(
+    interaction: ComponentInteraction,
+    ctx: poise::serenity_prelude::Context,
+    pr_id: u64,
+    db: Pool<Sqlite>,
+) {
+    async fn inner(
+        interaction: &ComponentInteraction,
+        ctx: &poise::serenity_prelude::Context,
+        pr_id: u64,
+        db: Pool<Sqlite>,
+    ) -> Result<(), HandledError> {
+        let Some(discussion) = DiscussionRecord::get_by_pr(&db, pr_id).await else {
+            return Err(HandledError::InternalError);
+        };
+
+        let _ = interaction
+            .create_response(ctx, CreateInteractionResponse::Acknowledge)
+            .await;
+
+        // EMBEDS
+        let mut embeds = create_issue_overview_embeds(ctx, &db, &discussion).await?;
+
+        if embeds.len() == 0 {
+            let _ = interaction
+                .create_followup(
+                    &ctx,
+                    CreateInteractionResponseFollowup::new()
+                        .ephemeral(true)
+                        .content(
+                            "There are no issues or overrides associated with this discussion.",
+                        ),
+                )
+                .await;
+            return Ok(());
+        }
+
+        let mut embeds = embeds.drain(..);
+        let message_default = CreateInteractionResponseFollowup::new().ephemeral(true);
+        let mut message = message_default.clone();
+        let mut message_embeds = 0;
+
+        while let Some(embed) = embeds.next() {
+            if message_embeds == 10 {
+                let _ = interaction.create_followup(&ctx, message).await;
+                message = message_default.clone();
+                message_embeds = 0;
+            }
+
+            message = message.add_embed(embed);
+            message_embeds += 1;
+        }
+
+        if message_embeds != 0 {
+            let _ = interaction.create_followup(&ctx, message).await;
+        }
+
+        Ok(())
+    }
+
+    match inner(&interaction, &ctx, pr_id, db).await {
+        Err(e) => {
+            let _ = interaction
+                .create_followup(
+                    &ctx,
+                    CreateInteractionResponseFollowup::new()
+                        .ephemeral(true)
+                        .content(format!("Error: {e}")),
+                )
+                .await;
+        }
+        Ok(()) => (),
     }
 }

@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT COUNT(user_id) as count FROM cr_raised_issue_overrides WHERE pr_id = ?1",
+  "describe": {
+    "columns": [
+      {
+        "name": "count",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "471bc071182cbd36a8ea8a9758408762b234af8f98053368c8bd8addfd44ea89"
+}

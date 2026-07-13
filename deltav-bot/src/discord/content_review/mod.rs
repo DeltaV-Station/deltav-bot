@@ -10,10 +10,13 @@ use tracing::error;
 use crate::{
     discord::{
         ApplicationContext, Context, EMBED_DESC_MAX_LEN, Error,
-        content_review::data::{
-            config::ignored::IgnoredKind,
-            discussions::DiscussionRecord,
-            forums::{ForumRecord, delete_forum_by_channel},
+        content_review::{
+            data::{
+                config::ignored::IgnoredKind,
+                discussions::DiscussionRecord,
+                forums::{ForumRecord, delete_forum_by_channel},
+            },
+            raised_issues::cr_issue,
         },
         permissions::{check_permissions_command, data::PermissionFlags},
         to_md_quote_block,
@@ -33,6 +36,7 @@ pub const BUTTON_ID_ACTION_START_PUBLIC: &'static str = "reviewStartPublic";
 pub const BUTTON_ID_ACTION_START_PRIVATE: &'static str = "reviewStartPrivate";
 pub const BUTTON_ID_ACTION_NOT_NEEDED: &'static str = "reviewNotNeeded";
 pub const BUTTON_ID_ACTION_MUTE_REMINDERS: &'static str = "reviewRemindersStop";
+pub const BUTTON_ID_ACTION_VIEW_ISSUES: &'static str = "reviewViewIssues";
 
 /// Error returned by underlying systems, denoting how the error should be presented to the user.
 /// If a function returns this type of Error, it must properly log all errors using `tracing::error`.
@@ -92,6 +96,7 @@ pub async fn discussion_channel_to_guild(
         "cr_complete",
         "cr_request_changes",
         "cr_ignored",
+        "cr_issue"
     )
 )]
 pub async fn cr(_ctx: Context<'_>) -> Result<(), Error> {

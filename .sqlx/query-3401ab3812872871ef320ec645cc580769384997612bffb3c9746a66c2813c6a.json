@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO cr_raised_issue_overrides(pr_id, message_id, user_id) VALUES(?1, ?2, ?3) ON CONFLICT(pr_id, user_id) DO UPDATE SET message_id = excluded.message_id",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "3401ab3812872871ef320ec645cc580769384997612bffb3c9746a66c2813c6a"
+}

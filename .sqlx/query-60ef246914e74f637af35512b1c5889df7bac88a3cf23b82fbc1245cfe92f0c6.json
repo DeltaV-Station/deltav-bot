@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM cr_raised_issue_overrides WHERE pr_id = ?1 AND user_id = ?2 RETURNING message_id",
+  "describe": {
+    "columns": [
+      {
+        "name": "message_id",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "60ef246914e74f637af35512b1c5889df7bac88a3cf23b82fbc1245cfe92f0c6"
+}

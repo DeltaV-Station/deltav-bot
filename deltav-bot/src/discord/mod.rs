@@ -15,7 +15,11 @@ use crate::{
             cr,
             data::config::CrConfig,
             github_events::cr_github_task,
-            raised_issues::{cr_issue_override, cr_issue_raise, cr_issue_view},
+            raised_issues::{
+                cr_issue_dismiss_context, cr_issue_dismiss_override_context,
+                cr_issue_override_context, cr_issue_overview_context, cr_issue_raise_context,
+                cr_issue_view_context,
+            },
             timers::cr_timers_task,
         },
         permissions::{
@@ -74,9 +78,13 @@ pub async fn initialize(
                 cr(),
                 perms(),
                 pr_feeds(),
-                cr_issue_raise(),
-                cr_issue_override(),
-                cr_issue_view(),
+                // the following are context menu actions, they can't be subcommands of slash commands
+                cr_issue_raise_context(),
+                cr_issue_view_context(),
+                cr_issue_override_context(),
+                cr_issue_dismiss_context(),
+                cr_issue_dismiss_override_context(),
+                cr_issue_overview_context(),
             ],
             event_handler: |ctx, event, framework, data| {
                 Box::pin(event_handler(ctx, event, framework, data))

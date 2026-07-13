@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT COUNT(user_id) as count FROM cr_raised_issues WHERE pr_id = ?1",
+  "describe": {
+    "columns": [
+      {
+        "name": "count",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "e13fb45db3e6b49c009b5d697d3d11cadc88b6c3cae2a48681d1e194fb7c5520"
+}
