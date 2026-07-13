@@ -274,6 +274,7 @@ You can [view the discussion here]({}) and write comments starting with `!discor
 
         discussion.set_forum_id(&db, forum_channel).await?;
         discussion.set_thread_id(&db, new_thread.id).await?;
+        discussion.set_triaged_by(&db, interaction.user.id).await?;
         discussion.delete_body(&db).await?;
         discussion.setup_review_time(&db, review_time_days).await?;
 

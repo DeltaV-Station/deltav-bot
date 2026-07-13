@@ -10,6 +10,7 @@ pub struct DiscussionRecord {
     pub pr_id: u64,
     pub forum_id: ChannelId,
     pub thread_id: ChannelId,
+    pub triaged_by: Option<UserId>,
 
     pub review_days_total: Option<u64>,
     pub review_days_passed: Option<u64>,
@@ -35,6 +36,9 @@ impl DiscussionRecord {
                     pr_title: r.pr_title.clone(),
                     pr_author: r.pr_author.clone(),
                     pr_body: r.pr_body.clone(),
+                    triaged_by: r
+                        .triaged_by
+                        .and_then(|x| Some(UserId::new(x.cast_unsigned()))),
                     ..Default::default()
                 })
                 .collect(),
@@ -100,6 +104,35 @@ impl DiscussionRecord {
         }
 
         self.forum_id = new_forum;
+
+        Ok(())
+    }
+
+    pub async fn set_triaged_by(
+        &mut self,
+        db: &Pool<Sqlite>,
+        triaged_by: UserId,
+    ) -> Result<(), HandledError> {
+        let triaged_by_s = triaged_by.get().cast_signed();
+        let pr_id_s = self.pr_id.cast_signed();
+
+        if let Err(e) = sqlx::query!(
+            "UPDATE cr_discussions SET triaged_by=?1 WHERE pr_id = ?2",
+            triaged_by_s,
+            pr_id_s
+        )
+        .execute(db)
+        .await
+        {
+            error!(
+                "Failed to set triaged_by to {triaged_by} for discussion of PR #{}: {e}",
+                self.pr_id
+            );
+
+            return Err(HandledError::InternalError);
+        }
+
+        self.triaged_by = Some(triaged_by);
 
         Ok(())
     }
@@ -186,6 +219,9 @@ impl DiscussionRecord {
                 pr_title: r.pr_title,
                 pr_author: r.pr_author,
                 pr_body: r.pr_body,
+                triaged_by: r
+                    .triaged_by
+                    .and_then(|x| Some(UserId::new(x.cast_unsigned()))),
             }),
             Err(e) => {
                 warn!("Failed to get discussion by thread {thread_id}: {e}");

@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use chrono::Utc;
 use poise::serenity_prelude::{
-    CreateActionRow, CreateAllowedMentions, CreateButton, CreateEmbed, CreateMessage,
+    CreateActionRow, CreateAllowedMentions, CreateButton, CreateEmbed, CreateMessage, Mentionable,
 };
 use sqlx::{Pool, Sqlite};
 use tokio::time::sleep;
@@ -39,11 +39,19 @@ pub async fn cr_timers_task(
             info!("Sending review reminder for PR #{}", discussion.pr_id);
 
             let mut message = CreateMessage::new();
+            let mut allowed_mentions = CreateAllowedMentions::new();
+
             if let Some(review_ping_role) = config.get_review_ping_role().await {
-                message = message
-                    .allowed_mentions(CreateAllowedMentions::new().roles([review_ping_role]))
-                    .content(format!("<@&{}>", review_ping_role.get()));
+                allowed_mentions = allowed_mentions.roles([review_ping_role]);
+                message = message.content(format!("<@&{}>", review_ping_role.get()));
             }
+
+            if let Some(triaged_by) = discussion.triaged_by {
+                allowed_mentions = allowed_mentions.users([triaged_by]);
+            }
+
+            message = message.allowed_mentions(allowed_mentions);
+
             let passed = discussion
                 .review_days_passed
                 .expect("If micros were set, this should be too");
@@ -66,7 +74,15 @@ pub async fn cr_timers_task(
                             } else {
                                 ""
                             }
-                        )),
+                        ))
+                        .field(
+                            "Triaged by",
+                            discussion
+                                .triaged_by
+                                .and_then(|x| Some(x.mention().to_string()))
+                                .unwrap_or("Unknown".into()),
+                            true,
+                        ),
                 )
                 .button(
                     CreateButton::new(format!(
