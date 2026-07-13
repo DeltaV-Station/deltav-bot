@@ -21,7 +21,8 @@ jobs:
       packages: write
       attestations: write
       id-token: write
-      #
+      artifact-metadata: write
+      
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
