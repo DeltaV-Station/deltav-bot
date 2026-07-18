@@ -6,7 +6,7 @@ use strum::FromRepr;
 use tokio::sync::RwLock;
 use tracing::error;
 
-use crate::discord::content_review::HandledError;
+use crate::discord::HandledError;
 
 #[repr(i64)]
 #[derive(FromRepr, Debug, PartialEq, ChoiceParameter, Clone)]

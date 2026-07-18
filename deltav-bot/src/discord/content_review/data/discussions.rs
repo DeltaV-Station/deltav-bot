@@ -3,7 +3,7 @@ use poise::serenity_prelude::{ChannelId, MessageId, UserId};
 use sqlx::{Pool, Sqlite, query};
 use tracing::{error, warn};
 
-use crate::discord::content_review::HandledError;
+use crate::discord::HandledError;
 
 #[derive(Default, Debug, Clone)]
 pub struct DiscussionRecord {

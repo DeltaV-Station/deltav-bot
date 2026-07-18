@@ -5,8 +5,9 @@ use sqlx::{Pool, Sqlite};
 use tokio::sync::RwLock;
 use tracing::{error, info, warn};
 
-use crate::discord::content_review::{HandledError, data::config::ignored::IgnoreCriteria};
+use crate::discord::{HandledError, content_review::data::config::ignored::IgnoreCriteria};
 
+pub mod commands;
 pub mod ignored;
 
 #[derive(Clone)]

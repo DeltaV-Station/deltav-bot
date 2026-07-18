@@ -8,10 +8,14 @@ use sqlx::{Pool, Sqlite};
 use tokio::time::sleep;
 use tracing::{error, info};
 
-use crate::discord::content_review::{
-    BUTTON_ID_ACTION_MUTE_REMINDERS, BUTTON_ID_ACTION_VIEW_ISSUES, HandledError,
-    INTERACTION_ID_PREFIX,
-    data::{config::CrConfig, discussions::DiscussionRecord},
+use crate::discord::{
+    HandledError,
+    content_review::{
+        consts::{
+            BUTTON_ID_ACTION_MUTE_REMINDERS, BUTTON_ID_ACTION_VIEW_ISSUES, INTERACTION_ID_PREFIX,
+        },
+        data::{config::CrConfig, discussions::DiscussionRecord},
+    },
 };
 
 pub async fn cr_timers_task(

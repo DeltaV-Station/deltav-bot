@@ -9,10 +9,12 @@ use sqlx::{Pool, Sqlite};
 use tracing::error;
 
 use crate::discord::{
-    Context, Error,
-    content_review::{HandledError, data::discussions::DiscussionRecord},
+    Context, Error, HandledError,
+    content_review::data::discussions::DiscussionRecord,
     permissions::{check_permissions_command, data::PermissionFlags},
 };
+
+pub mod comp_tasks;
 
 #[poise::command(
     slash_command,

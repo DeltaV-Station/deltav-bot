@@ -46,9 +46,20 @@ struct Data {
     cr_config: CrConfig,
     pr_feeds: PrDashboards,
 }
+
 type Error = Box<dyn std::error::Error + Send + Sync>;
 type Context<'a> = poise::Context<'a, Data, Error>;
 type ApplicationContext<'a> = poise::ApplicationContext<'a, Data, Error>;
+
+/// Error returned by underlying systems, denoting how the error should be presented to the user.
+/// If a function returns this type of Error, it must properly log all errors using `tracing::error`.
+#[derive(thiserror::Error, Debug)]
+pub enum HandledError {
+    #[error("{0}")]
+    UserfacingError(String),
+    #[error("An internal error occurred")]
+    InternalError,
+}
 
 pub async fn initialize(
     token: String,

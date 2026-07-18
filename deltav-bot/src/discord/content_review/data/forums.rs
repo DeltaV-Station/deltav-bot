@@ -2,9 +2,9 @@ use poise::serenity_prelude::{ChannelId, ForumTagId};
 use sqlx::{Pool, Sqlite};
 use tracing::{error, info, warn};
 
-use crate::discord::content_review::{
+use crate::discord::{
     HandledError,
-    data::{config::CrConfig, macros::id_to_int},
+    content_review::data::{config::CrConfig, macros::id_to_int},
 };
 
 #[derive(Debug, Copy, Clone)]

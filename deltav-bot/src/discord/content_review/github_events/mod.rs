@@ -12,14 +12,16 @@ use crate::{
     discord::{
         EMBED_DESC_MAX_LEN,
         content_review::{
-            BUTTON_ID_ACTION_NOT_NEEDED, BUTTON_ID_ACTION_START_PRIVATE,
-            BUTTON_ID_ACTION_START_PUBLIC, INTERACTION_ID_PREFIX, create_pr_embed,
+            consts::{
+                BUTTON_ID_ACTION_NOT_NEEDED, BUTTON_ID_ACTION_START_PRIVATE,
+                BUTTON_ID_ACTION_START_PUBLIC, INTERACTION_ID_PREFIX,
+            },
             data::{
                 config::{CrConfig, ignored::IgnoredKind},
                 discussions::DiscussionRecord,
                 forums::ForumRecord,
             },
-            discussion_channel_to_guild,
+            util::{create_pr_embed, discussion_channel_to_guild},
         },
         pr_feeds::data::PrDashboards,
     },
@@ -29,6 +31,8 @@ use crate::{
 
 const GH_COMMENT_COMMAND: &'static str = "!discord";
 const GH_REVIEW_COMMAND: &'static str = "!review";
+
+pub mod commands;
 
 // TODO: spawn tasks to handle these, use semaphore
 pub async fn cr_github_task(

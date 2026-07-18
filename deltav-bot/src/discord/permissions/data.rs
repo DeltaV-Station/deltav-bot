@@ -7,7 +7,7 @@ use tracing::{error, info};
 
 use sqlx::Error as SqlxError;
 
-use crate::discord::content_review::HandledError;
+use crate::discord::HandledError;
 
 bitflags! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
