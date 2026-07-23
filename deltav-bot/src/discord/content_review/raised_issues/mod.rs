@@ -166,10 +166,10 @@ pub async fn cr_issue_raise_context(ctx: Context<'_>, message: Message) -> Resul
         return Ok(());
     }
 
-    let channel = ctx
-        .guild_channel()
-        .await
-        .expect("We already know this is a guild channel");
+    let Some(channel) = ctx.guild_channel().await else {
+        error!("Channel for {discussion:?} wasn't a guild channel.");
+        return Ok(());
+    };
 
     if let Some(old_message) = old_message {
         match channel.message(&ctx, old_message).await {
@@ -237,10 +237,10 @@ pub async fn cr_issue_override_context(ctx: Context<'_>, message: Message) -> Re
         }
     };
 
-    let guild_channel = ctx
-        .guild_channel()
-        .await
-        .expect("We already know this is a guild channel");
+    let Some(guild_channel) = ctx.guild_channel().await else {
+        error!("Channel for {discussion:?} wasn't a guild channel.");
+        return Ok(());
+    };
 
     match discussion
         .get_issue_by_author(&ctx.data().db, message.author.id)
@@ -359,10 +359,10 @@ pub async fn cr_issue_view_context(ctx: Context<'_>, message: Message) -> Result
         }
     };
 
-    let guild_channel = ctx
-        .guild_channel()
-        .await
-        .expect("We already know we're in a guild channel");
+    let Some(guild_channel) = ctx.guild_channel().await else {
+        error!("Channel for {discussion:?} wasn't a guild channel.");
+        return Ok(());
+    };
 
     ctx.send(
         CreateReply::default()
