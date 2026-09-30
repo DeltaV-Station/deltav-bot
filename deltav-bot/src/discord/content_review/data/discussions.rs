@@ -365,7 +365,7 @@ impl DiscussionRecord {
     ) -> Result<Vec<(UserId, MessageId)>, HandledError> {
         let pr_id_s = self.pr_id.cast_signed();
         match sqlx::query!(
-            "SELECT * FROM cr_raised_issues WHERE pr_id = ?1 GROUP BY user_id",
+            "SELECT * FROM cr_raised_issues WHERE pr_id = ?1 ORDER BY user_id, message_id",
             pr_id_s
         )
         .fetch_all(db)
@@ -647,7 +647,7 @@ impl DiscussionRecord {
     ) -> Result<Vec<(UserId, MessageId)>, HandledError> {
         let pr_id_s = self.pr_id.cast_signed();
         match sqlx::query!(
-            "SELECT user_id, message_id FROM cr_raised_issue_overrides WHERE pr_id = ?1",
+            "SELECT user_id, message_id FROM cr_raised_issue_overrides WHERE pr_id = ?1 ORDER BY user_id, message_id",
             pr_id_s,
         )
         .fetch_all(db)
