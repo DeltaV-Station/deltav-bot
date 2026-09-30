@@ -119,7 +119,7 @@ pub async fn cr_issue_raise_context(ctx: Context<'_>, message: Message) -> Resul
             }
         }
         Err(e) => {
-            ctx.reply(e.to_string());
+            ctx.reply(e.to_string()).await?;
             return Ok(());
         }
     }
@@ -142,11 +142,6 @@ pub async fn cr_issue_raise_context(ctx: Context<'_>, message: Message) -> Resul
             .await?;
         return Ok(());
     }
-
-    let Some(channel) = ctx.guild_channel().await else {
-        error!("Channel for {discussion:?} wasn't a guild channel.");
-        return Ok(());
-    };
 
     ctx.reply("Issue raised successfully.").await?;
 
@@ -191,7 +186,7 @@ pub async fn cr_issue_override_context(ctx: Context<'_>, message: Message) -> Re
                 message.author.id, discussion.pr_id
             );
 
-            ctx.reply(e.to_string());
+            ctx.reply(e.to_string()).await?;
             return Ok(());
         }
     }
@@ -416,7 +411,7 @@ pub async fn create_issue_overview_embeds(
         .ok_or(HandledError::InternalError)?;
 
     let issues = discussion.get_issues(&db).await?;
-    let overrides = discussion.get_issue_overrides(&db).await?;
+    let overrides = discussion.get_overrides(&db).await?;
 
     let mut embeds = vec![];
 
