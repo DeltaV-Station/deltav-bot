@@ -1,8 +1,10 @@
+use std::cell::LazyCell;
+
 use poise::{
     CreateReply,
     serenity_prelude::{
-        Cache, CacheHttp, CreateEmbed, EMBED_MAX_LENGTH, GuildChannel, Mentionable, Message,
-        MessageId,
+        Cache, CacheHttp, CreateEmbed, EMBED_MAX_LENGTH, GuildChannel, Http, Mentionable, Message,
+        MessageId, ReactionType,
     },
 };
 use sqlx::{Pool, Sqlite};
@@ -11,7 +13,10 @@ use tracing::error;
 use crate::discord::{
     Context, Error, HandledError,
     content_review::data::discussions::DiscussionRecord,
-    permissions::{check_permissions_command, data::PermissionFlags},
+    permissions::{
+        check_permissions_command,
+        data::{PermissionFlags, Permissions},
+    },
 };
 
 pub mod comp_tasks;
@@ -56,7 +61,14 @@ async fn cr_issue_overview_impl(ctx: &Context<'_>) -> Result<(), Error> {
         }
     };
 
-    let mut embeds = match create_issue_overview_embeds(&ctx, &ctx.data().db, &discussion).await {
+    let mut embeds = match create_issue_overview_embeds(
+        &ctx,
+        &ctx.data().db,
+        &discussion,
+        &ctx.data().permissions,
+    )
+    .await
+    {
         Ok(x) => x,
         Err(e) => {
             ctx.reply(format!("Failed to create overview: {e}")).await?;
@@ -257,8 +269,16 @@ pub async fn cr_issue_view_context(ctx: Context<'_>, message: Message) -> Result
     let mut reply = CreateReply::default();
 
     for message in issue_messages {
-        reply =
-            reply.embed(create_message_embed(&ctx, &guild_channel, message, Some("issue")).await?);
+        reply = reply.embed(
+            create_message_embed(
+                &ctx,
+                &guild_channel,
+                &ctx.data().permissions,
+                message,
+                Some("issue"),
+            )
+            .await?,
+        );
     }
 
     ctx.send(reply).await?;
@@ -353,8 +373,9 @@ pub async fn cr_issue_dismiss_context(ctx: Context<'_>, message: Message) -> Res
 }
 
 pub async fn create_message_embed(
-    ctx: impl CacheHttp + AsRef<Cache>,
+    ctx: impl CacheHttp + AsRef<Http> + AsRef<Cache>,
     channel: &GuildChannel,
+    permissions: &Permissions,
     message_id: MessageId,
     message_label_override: Option<impl Into<String>>,
 ) -> Result<CreateEmbed, Error> {
@@ -376,6 +397,30 @@ pub async fn create_message_embed(
         }
     };
 
+    let positive_reactions = match message
+        .reaction_users(&ctx, POSITIVE_REACTION.clone(), Some(100), None)
+        .await
+    {
+        Ok(users) => {
+            let mut count = 0;
+            for user in users {
+                if permissions
+                    .has_flags(user.id.get(), PermissionFlags::CONTENT_REVIEWER)
+                    .await
+                {
+                    count += 1;
+                }
+            }
+            Some(count)
+        }
+        Err(e) => {
+            error!(
+                "Failed to count positive CR reactions for message {message_id} in {channel}: {e:#?}"
+            );
+            None
+        }
+    };
+
     let author_name = &message.author.name;
     let message_content_truncated = message
         .content_safe(&ctx)
@@ -383,17 +428,31 @@ pub async fn create_message_embed(
         .take(EMBED_MAX_LENGTH)
         .collect::<String>();
 
-    Ok(CreateEmbed::new()
+    let embed = CreateEmbed::new()
         .title(format!("{author_name}'s {message_label}",))
         .url(message_id.link(channel.id, Some(channel.guild_id)))
         .description(message_content_truncated)
-        .field("Author", message.author.mention().to_string(), true))
+        .field("Author", message.author.mention().to_string(), true)
+        .field(
+            POSITIVE_REACTION.to_string(),
+            positive_reactions
+                .and_then(|x| Some(x.to_string()))
+                .unwrap_or("ERROR".into()),
+            true,
+        );
+
+    Ok(embed)
 }
 
+// TODO: Make this configurable instead of hardcoding
+const POSITIVE_REACTION: LazyCell<ReactionType> =
+    LazyCell::new(|| ReactionType::Unicode("👍".into()));
+
 pub async fn create_issue_overview_embeds(
-    ctx: impl CacheHttp + AsRef<Cache>,
+    ctx: impl CacheHttp + AsRef<Http> + AsRef<Cache>,
     db: &Pool<Sqlite>,
     discussion: &DiscussionRecord,
+    permissions: &Permissions,
 ) -> Result<Vec<CreateEmbed>, HandledError> {
     let discussion_channel = discussion
         .thread_id
@@ -413,17 +472,24 @@ pub async fn create_issue_overview_embeds(
     let mut embeds = vec![];
 
     for (user, message) in issues {
-        let embed =
-            match create_message_embed(&ctx, &discussion_channel, message, Some("issue")).await {
-                Ok(x) => x,
-                Err(e) => {
-                    error!(
-                        "Failed to create issue embed for {user}'s message {message} in {}: {e}",
-                        discussion_channel.id
-                    );
-                    continue;
-                }
-            };
+        let embed = match create_message_embed(
+            &ctx,
+            &discussion_channel,
+            &permissions,
+            message,
+            Some("issue"),
+        )
+        .await
+        {
+            Ok(x) => x,
+            Err(e) => {
+                error!(
+                    "Failed to create issue embed for {user}'s message {message} in {}: {e}",
+                    discussion_channel.id
+                );
+                continue;
+            }
+        };
 
         embeds.push(embed);
     }
@@ -432,6 +498,7 @@ pub async fn create_issue_overview_embeds(
         let embed = match create_message_embed(
             &ctx,
             &discussion_channel,
+            &permissions,
             message,
             Some("contention"),
         )

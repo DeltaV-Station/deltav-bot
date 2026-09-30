@@ -8,6 +8,7 @@ use crate::discord::{
     content_review::{
         data::discussions::DiscussionRecord, raised_issues::create_issue_overview_embeds,
     },
+    permissions::data::Permissions,
 };
 
 pub async fn button_click_view_issues_task(
@@ -15,12 +16,14 @@ pub async fn button_click_view_issues_task(
     ctx: poise::serenity_prelude::Context,
     pr_id: u64,
     db: Pool<Sqlite>,
+    permissions: Permissions,
 ) {
     async fn inner(
         interaction: &ComponentInteraction,
         ctx: &poise::serenity_prelude::Context,
         pr_id: u64,
         db: Pool<Sqlite>,
+        permissions: Permissions,
     ) -> Result<(), HandledError> {
         let Some(discussion) = DiscussionRecord::get_by_pr(&db, pr_id).await else {
             return Err(HandledError::InternalError);
@@ -31,7 +34,7 @@ pub async fn button_click_view_issues_task(
             .await;
 
         // EMBEDS
-        let mut embeds = create_issue_overview_embeds(ctx, &db, &discussion).await?;
+        let mut embeds = create_issue_overview_embeds(ctx, &db, &discussion, &permissions).await?;
 
         if embeds.len() == 0 {
             let _ = interaction
@@ -70,7 +73,7 @@ pub async fn button_click_view_issues_task(
         Ok(())
     }
 
-    match inner(&interaction, &ctx, pr_id, db).await {
+    match inner(&interaction, &ctx, pr_id, db, permissions).await {
         Err(e) => {
             let _ = interaction
                 .create_followup(

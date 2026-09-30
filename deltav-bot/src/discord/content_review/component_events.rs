@@ -154,6 +154,7 @@ pub async fn cr_component_task(
                             ctx.clone(),
                             pr_id,
                             db.clone(),
+                            permissions.clone(),
                         ));
                     }
 
