@@ -148,29 +148,6 @@ pub async fn cr_issue_raise_context(ctx: Context<'_>, message: Message) -> Resul
         return Ok(());
     };
 
-    let overrides = match discussion.clear_issue_overrides(&ctx.data().db).await {
-        Ok(x) => x,
-        Err(e) => {
-            ctx.reply(format!("Failed to retrieve overrides: {e}"))
-                .await?;
-            return Ok(());
-        }
-    };
-
-    for (_, message_id) in overrides {
-        match channel.message(&ctx, message_id).await {
-            Ok(x) => {
-                x.unpin(&ctx).await?;
-            }
-            Err(e) => {
-                error!(
-                    "Failed to resolve old override message {message_id} in {discussion:?}: {e:#?}"
-                );
-                // Might've already been deleted, not going to bug the user about it or abort
-            }
-        }
-    }
-
     ctx.reply("Issue raised successfully.").await?;
 
     Ok(())
