@@ -1,55 +1,55 @@
 {
   "db_name": "SQLite",
-  "query": "INSERT INTO pr_dashboards(gh_label, channel_id, ping_role) VALUES(?1,?2,?3) RETURNING *",
+  "query": "SELECT * FROM cr_raised_issue_overrides WHERE pr_id = ?1 AND user_id = ?2",
   "describe": {
     "columns": [
       {
-        "name": "id",
+        "name": "pr_id",
         "ordinal": 0,
         "type_info": "Integer",
         "origin": {
           "Table": {
-            "table": "pr_dashboards",
-            "name": "id"
+            "table": "cr_raised_issue_overrides",
+            "name": "pr_id"
           }
         }
       },
       {
-        "name": "gh_label",
+        "name": "user_id",
         "ordinal": 1,
-        "type_info": "Text",
+        "type_info": "Integer",
         "origin": {
           "Table": {
-            "table": "pr_dashboards",
-            "name": "gh_label"
+            "table": "cr_raised_issue_overrides",
+            "name": "user_id"
           }
         }
       },
       {
-        "name": "channel_id",
+        "name": "message_id",
         "ordinal": 2,
         "type_info": "Integer",
         "origin": {
           "Table": {
-            "table": "pr_dashboards",
-            "name": "channel_id"
+            "table": "cr_raised_issue_overrides",
+            "name": "message_id"
           }
         }
       },
       {
-        "name": "ping_role",
+        "name": "related_issue",
         "ordinal": 3,
         "type_info": "Integer",
         "origin": {
           "Table": {
-            "table": "pr_dashboards",
-            "name": "ping_role"
+            "table": "cr_raised_issue_overrides",
+            "name": "related_issue"
           }
         }
       }
     ],
     "parameters": {
-      "Right": 3
+      "Right": 2
     },
     "nullable": [
       false,
@@ -58,5 +58,5 @@
       true
     ]
   },
-  "hash": "588d18c410e3f85b7d2e7dc4cbfa71e17f641c33b63afb85830dd72e83d450c6"
+  "hash": "ce31fec1e5dd645fb447906bda016c78e4619e4a2dba0cb3373c477dae55b7a8"
 }

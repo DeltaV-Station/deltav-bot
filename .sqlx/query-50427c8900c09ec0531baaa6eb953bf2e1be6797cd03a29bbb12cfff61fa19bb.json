@@ -1,16 +1,16 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT flags FROM permissions WHERE snowflake = ?1",
+  "query": "SELECT user_id FROM cr_raised_issue_overrides WHERE message_id = ?1",
   "describe": {
     "columns": [
       {
-        "name": "flags",
+        "name": "user_id",
         "ordinal": 0,
         "type_info": "Integer",
         "origin": {
           "Table": {
-            "table": "permissions",
-            "name": "flags"
+            "table": "cr_raised_issue_overrides",
+            "name": "user_id"
           }
         }
       }
@@ -22,5 +22,5 @@
       false
     ]
   },
-  "hash": "82db4c23a69945cf04435500fb0fc13ae5836fcee319b437f473d9d489ec84c1"
+  "hash": "50427c8900c09ec0531baaa6eb953bf2e1be6797cd03a29bbb12cfff61fa19bb"
 }

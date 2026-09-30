@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO cr_raised_issue_overrides(pr_id, message_id, user_id, related_issue) VALUES(?1, ?2, ?3, ?4)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "79998e51d2914ead49aa50f4e1c2170591780d56b96fa37c145e83c70500ef59"
+}

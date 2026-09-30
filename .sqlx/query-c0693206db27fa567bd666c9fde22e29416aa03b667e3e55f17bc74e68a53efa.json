@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM cr_raised_issues WHERE message_id = ?1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "c0693206db27fa567bd666c9fde22e29416aa03b667e3e55f17bc74e68a53efa"
+}

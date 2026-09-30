@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO cr_raised_issues(pr_id, user_id, message_id) VALUES(?1, ?2, ?3)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "a72d82817a757347b670bdeb19fa79c829a4eeaabb1ab95de5bb7bb2f148a75c"
+}

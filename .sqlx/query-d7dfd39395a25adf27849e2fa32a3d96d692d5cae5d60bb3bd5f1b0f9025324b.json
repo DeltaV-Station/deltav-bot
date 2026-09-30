@@ -6,17 +6,35 @@
       {
         "name": "id",
         "ordinal": 0,
-        "type_info": "Integer"
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "cr_ignored",
+            "name": "id"
+          }
+        }
       },
       {
         "name": "kind",
         "ordinal": 1,
-        "type_info": "Integer"
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "cr_ignored",
+            "name": "kind"
+          }
+        }
       },
       {
         "name": "value",
         "ordinal": 2,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "cr_ignored",
+            "name": "value"
+          }
+        }
       }
     ],
     "parameters": {

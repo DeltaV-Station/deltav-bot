@@ -1,44 +1,44 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT * FROM cr_ignored",
+  "query": "SELECT * FROM cr_raised_issues WHERE pr_id = ?1 AND user_id = ?2",
   "describe": {
     "columns": [
       {
-        "name": "id",
+        "name": "message_id",
         "ordinal": 0,
         "type_info": "Integer",
         "origin": {
           "Table": {
-            "table": "cr_ignored",
-            "name": "id"
+            "table": "cr_raised_issues",
+            "name": "message_id"
           }
         }
       },
       {
-        "name": "kind",
+        "name": "pr_id",
         "ordinal": 1,
         "type_info": "Integer",
         "origin": {
           "Table": {
-            "table": "cr_ignored",
-            "name": "kind"
+            "table": "cr_raised_issues",
+            "name": "pr_id"
           }
         }
       },
       {
-        "name": "value",
+        "name": "user_id",
         "ordinal": 2,
-        "type_info": "Text",
+        "type_info": "Integer",
         "origin": {
           "Table": {
-            "table": "cr_ignored",
-            "name": "value"
+            "table": "cr_raised_issues",
+            "name": "user_id"
           }
         }
       }
     ],
     "parameters": {
-      "Right": 0
+      "Right": 2
     },
     "nullable": [
       false,
@@ -46,5 +46,5 @@
       false
     ]
   },
-  "hash": "484b0f569919a9bcc90f63b8ced1b66f19758008e7ddb82a1b92baef214f3f7e"
+  "hash": "cd0b3cc1e226977c886055ee2c328240e01b79a611600229b342066cc34e1380"
 }

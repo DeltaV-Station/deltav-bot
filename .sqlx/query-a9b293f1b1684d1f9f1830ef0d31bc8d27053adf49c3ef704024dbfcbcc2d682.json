@@ -6,52 +6,112 @@
       {
         "name": "id",
         "ordinal": 0,
-        "type_info": "Integer"
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "cr_config",
+            "name": "id"
+          }
+        }
       },
       {
         "name": "intake_cr_forum",
         "ordinal": 1,
-        "type_info": "Integer"
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "cr_config",
+            "name": "intake_cr_forum"
+          }
+        }
       },
       {
         "name": "public_cr_forum",
         "ordinal": 2,
-        "type_info": "Integer"
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "cr_config",
+            "name": "public_cr_forum"
+          }
+        }
       },
       {
         "name": "private_cr_forum",
         "ordinal": 3,
-        "type_info": "Integer"
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "cr_config",
+            "name": "private_cr_forum"
+          }
+        }
       },
       {
         "name": "gh_label_no_review",
         "ordinal": 4,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "cr_config",
+            "name": "gh_label_no_review"
+          }
+        }
       },
       {
         "name": "gh_label_under_review",
         "ordinal": 5,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "cr_config",
+            "name": "gh_label_under_review"
+          }
+        }
       },
       {
         "name": "review_ping_role",
         "ordinal": 6,
-        "type_info": "Integer"
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "cr_config",
+            "name": "review_ping_role"
+          }
+        }
       },
       {
         "name": "gh_label_cr_approved",
         "ordinal": 7,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "cr_config",
+            "name": "gh_label_cr_approved"
+          }
+        }
       },
       {
         "name": "gh_label_cr_denied",
         "ordinal": 8,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "cr_config",
+            "name": "gh_label_cr_denied"
+          }
+        }
       },
       {
         "name": "gh_label_cr_changes_requested",
         "ordinal": 9,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "cr_config",
+            "name": "gh_label_cr_changes_requested"
+          }
+        }
       }
     ],
     "parameters": {

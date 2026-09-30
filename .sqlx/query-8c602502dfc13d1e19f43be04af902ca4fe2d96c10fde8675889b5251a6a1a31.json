@@ -6,37 +6,79 @@
       {
         "name": "channel_id",
         "ordinal": 0,
-        "type_info": "Integer"
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "cr_forums",
+            "name": "channel_id"
+          }
+        }
       },
       {
         "name": "private",
         "ordinal": 1,
-        "type_info": "Integer"
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "cr_forums",
+            "name": "private"
+          }
+        }
       },
       {
         "name": "tag_cr_approved",
         "ordinal": 2,
-        "type_info": "Integer"
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "cr_forums",
+            "name": "tag_cr_approved"
+          }
+        }
       },
       {
         "name": "tag_cr_test_merge",
         "ordinal": 3,
-        "type_info": "Integer"
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "cr_forums",
+            "name": "tag_cr_test_merge"
+          }
+        }
       },
       {
         "name": "tag_cr_denied",
         "ordinal": 4,
-        "type_info": "Integer"
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "cr_forums",
+            "name": "tag_cr_denied"
+          }
+        }
       },
       {
         "name": "tag_pr_closed",
         "ordinal": 5,
-        "type_info": "Integer"
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "cr_forums",
+            "name": "tag_pr_closed"
+          }
+        }
       },
       {
         "name": "tag_pr_merged",
         "ordinal": 6,
-        "type_info": "Integer"
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "cr_forums",
+            "name": "tag_pr_merged"
+          }
+        }
       }
     ],
     "parameters": {

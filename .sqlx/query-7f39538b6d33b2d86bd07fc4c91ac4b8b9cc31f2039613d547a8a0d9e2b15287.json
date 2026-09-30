@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "DELETE FROM cr_raised_issue_overrides WHERE pr_id = ?1 RETURNING user_id, message_id",
+  "query": "SELECT user_id, message_id FROM cr_raised_issue_overrides WHERE pr_id = ?1 ORDER BY user_id, message_id",
   "describe": {
     "columns": [
       {
@@ -34,5 +34,5 @@
       false
     ]
   },
-  "hash": "08dfca0201dab801c3835e9160f40859fde88396a4e0d6e618fd68fd4282d5f6"
+  "hash": "7f39538b6d33b2d86bd07fc4c91ac4b8b9cc31f2039613d547a8a0d9e2b15287"
 }

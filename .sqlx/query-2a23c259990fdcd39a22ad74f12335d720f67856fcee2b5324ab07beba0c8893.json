@@ -6,52 +6,112 @@
       {
         "name": "pr_id",
         "ordinal": 0,
-        "type_info": "Integer"
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "cr_discussions",
+            "name": "pr_id"
+          }
+        }
       },
       {
         "name": "forum_id",
         "ordinal": 1,
-        "type_info": "Integer"
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "cr_discussions",
+            "name": "forum_id"
+          }
+        }
       },
       {
         "name": "thread_id",
         "ordinal": 2,
-        "type_info": "Integer"
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "cr_discussions",
+            "name": "thread_id"
+          }
+        }
       },
       {
         "name": "review_days_total",
         "ordinal": 3,
-        "type_info": "Integer"
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "cr_discussions",
+            "name": "review_days_total"
+          }
+        }
       },
       {
         "name": "review_days_passed",
         "ordinal": 4,
-        "type_info": "Integer"
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "cr_discussions",
+            "name": "review_days_passed"
+          }
+        }
       },
       {
         "name": "review_days_next_micros",
         "ordinal": 5,
-        "type_info": "Integer"
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "cr_discussions",
+            "name": "review_days_next_micros"
+          }
+        }
       },
       {
         "name": "pr_title",
         "ordinal": 6,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "cr_discussions",
+            "name": "pr_title"
+          }
+        }
       },
       {
         "name": "pr_author",
         "ordinal": 7,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "cr_discussions",
+            "name": "pr_author"
+          }
+        }
       },
       {
         "name": "pr_body",
         "ordinal": 8,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "cr_discussions",
+            "name": "pr_body"
+          }
+        }
       },
       {
         "name": "triaged_by",
         "ordinal": 9,
-        "type_info": "Integer"
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "cr_discussions",
+            "name": "triaged_by"
+          }
+        }
       }
     ],
     "parameters": {
