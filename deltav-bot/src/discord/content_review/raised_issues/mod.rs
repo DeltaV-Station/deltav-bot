@@ -222,7 +222,9 @@ pub async fn cr_issue_override_context(ctx: Context<'_>, message: Message) -> Re
     Ok(())
 }
 
-#[poise::command(context_menu_command = "View author's issue", ephemeral)]
+// TODO: This will probably error if there are more than 10 issues (embeds)
+// TODO: Show contentions too
+#[poise::command(context_menu_command = "View author's issues", ephemeral)]
 pub async fn cr_issue_view_context(ctx: Context<'_>, message: Message) -> Result<(), Error> {
     if !check_permissions_command(&ctx, PermissionFlags::CONTENT_REVIEWER).await? {
         return Ok(());
@@ -233,7 +235,7 @@ pub async fn cr_issue_view_context(ctx: Context<'_>, message: Message) -> Result
         Some(x) => x,
         None => {
             ctx.reply(
-                "Issues can only be raised in review threads, there are no contentions to view here.",
+                "Issues can only be raised in review threads, there are no issues to view here.",
             )
             .await?;
             return Ok(());
