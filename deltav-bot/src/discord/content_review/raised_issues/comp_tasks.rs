@@ -40,7 +40,7 @@ pub async fn button_click_view_issues_task(
                     CreateInteractionResponseFollowup::new()
                         .ephemeral(true)
                         .content(
-                            "There are no issues or overrides associated with this discussion.",
+                            "There are no issues or contentions associated with this discussion.",
                         ),
                 )
                 .await;

@@ -148,7 +148,7 @@ pub async fn cr_issue_raise_context(ctx: Context<'_>, message: Message) -> Resul
     Ok(())
 }
 
-#[poise::command(context_menu_command = "Vote to override issues", ephemeral)]
+#[poise::command(context_menu_command = "Contest issues", ephemeral)]
 pub async fn cr_issue_override_context(ctx: Context<'_>, message: Message) -> Result<(), Error> {
     if !check_permissions_command(&ctx, PermissionFlags::CONTENT_REVIEWER).await? {
         return Ok(());
@@ -221,7 +221,7 @@ pub async fn cr_issue_view_context(ctx: Context<'_>, message: Message) -> Result
         Some(x) => x,
         None => {
             ctx.reply(
-                "Issues can only be raised in review threads, there are no overrides to view here.",
+                "Issues can only be raised in review threads, there are no contentions to view here.",
             )
             .await?;
             return Ok(());
@@ -432,8 +432,13 @@ pub async fn create_issue_overview_embeds(
     }
 
     for (user, message) in overrides {
-        let embed = match create_message_embed(&ctx, &discussion_channel, message, Some("override"))
-            .await
+        let embed = match create_message_embed(
+            &ctx,
+            &discussion_channel,
+            message,
+            Some("contention"),
+        )
+        .await
         {
             Ok(x) => x,
             Err(e) => {
