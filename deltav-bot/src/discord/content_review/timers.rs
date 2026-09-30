@@ -101,7 +101,7 @@ pub async fn cr_timers_task(
             }
 
             let issue_count = discussion
-                .count_raised_issues(&db)
+                .count_issues(&db)
                 .await
                 .and_then(|x| Ok(x.to_string()))
                 .unwrap_or("ERROR".into());
