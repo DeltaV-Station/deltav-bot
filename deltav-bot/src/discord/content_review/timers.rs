@@ -101,7 +101,7 @@ pub async fn cr_timers_task(
             }
 
             let issue_count = discussion
-                .count_raised_issues(&db)
+                .count_issues(&db)
                 .await
                 .and_then(|x| Ok(x.to_string()))
                 .unwrap_or("ERROR".into());
@@ -114,13 +114,15 @@ pub async fn cr_timers_task(
 
             let message = CreateMessage::new()
                 .embed(CreateEmbed::new().title("Issues").description(format!(
-                "There are currently {issue_count} issues and {override_count} votes to override."
-            ))).components(
-                vec![
-                    CreateActionRow::Buttons(vec![
-                        CreateButton::new(format!("{INTERACTION_ID_PREFIX}_{BUTTON_ID_ACTION_VIEW_ISSUES}_{}", discussion.pr_id)).label("View")
-                    ])
-                ]);
+                    "There are currently {issue_count} issues and {override_count} contentions."
+                )))
+                .components(vec![CreateActionRow::Buttons(vec![
+                    CreateButton::new(format!(
+                        "{INTERACTION_ID_PREFIX}_{BUTTON_ID_ACTION_VIEW_ISSUES}_{}",
+                        discussion.pr_id
+                    ))
+                    .label("View"),
+                ])]);
 
             if let Err(e) = discussion.thread_id.send_message(&ctx, message).await {
                 error!("Failed to send issue summary for {discussion:?}: {e}")

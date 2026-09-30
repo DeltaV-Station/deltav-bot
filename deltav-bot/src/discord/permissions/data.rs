@@ -28,6 +28,12 @@ pub struct Permissions {
     cache: Arc<RwLock<HashMap<Snowflake, PermissionFlags>>>,
 }
 
+impl AsRef<Permissions> for Permissions {
+    fn as_ref(&self) -> &Permissions {
+        self
+    }
+}
+
 impl Permissions {
     pub fn new(db: Pool<Sqlite>) -> Self {
         Self {

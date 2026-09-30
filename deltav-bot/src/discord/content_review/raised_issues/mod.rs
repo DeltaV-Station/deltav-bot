@@ -1,8 +1,10 @@
+use std::cell::LazyCell;
+
 use poise::{
     CreateReply,
     serenity_prelude::{
-        Cache, CacheHttp, CreateEmbed, EMBED_MAX_LENGTH, GuildChannel, Mentionable, Message,
-        MessageId,
+        Cache, CacheHttp, CreateEmbed, EMBED_MAX_LENGTH, GuildChannel, Http, Mentionable, Message,
+        MessageId, ReactionType,
     },
 };
 use sqlx::{Pool, Sqlite};
@@ -11,7 +13,10 @@ use tracing::error;
 use crate::discord::{
     Context, Error, HandledError,
     content_review::data::discussions::DiscussionRecord,
-    permissions::{check_permissions_command, data::PermissionFlags},
+    permissions::{
+        check_permissions_command,
+        data::{PermissionFlags, Permissions},
+    },
 };
 
 pub mod comp_tasks;
@@ -20,7 +25,7 @@ pub mod comp_tasks;
     slash_command,
     rename = "issue",
     ephemeral,
-    subcommands("cr_issue_dismiss", "cr_issue_dismiss_override", "cr_issue_overview")
+    subcommands("cr_issue_overview")
 )]
 pub async fn cr_issue(_ctx: Context<'_>) -> Result<(), Error> {
     // dummy command
@@ -56,7 +61,14 @@ async fn cr_issue_overview_impl(ctx: &Context<'_>) -> Result<(), Error> {
         }
     };
 
-    let mut embeds = match create_issue_overview_embeds(&ctx, &ctx.data().db, &discussion).await {
+    let mut embeds = match create_issue_overview_embeds(
+        &ctx,
+        &ctx.data().db,
+        &discussion,
+        &ctx.data().permissions,
+    )
+    .await
+    {
         Ok(x) => x,
         Err(e) => {
             ctx.reply(format!("Failed to create overview: {e}")).await?;
@@ -108,43 +120,20 @@ pub async fn cr_issue_raise_context(ctx: Context<'_>, message: Message) -> Resul
         }
     };
 
-    let old_message = match discussion
-        .get_issue_by_author(&ctx.data().db, ctx.author().id)
-        .await
-    {
-        Ok(x) => x,
-        Err(e) => {
-            ctx.reply(format!("Failed to check for previous issue: {e}"))
-                .await?;
-            return Ok(());
-        }
-    };
-
     match discussion
-        .get_override_by_author(&ctx.data().db, ctx.author().id)
+        .get_overrides_by_author(&ctx.data().db, message.author.id)
         .await
     {
-        Ok(Some(x)) => {
-            if message.id == x {
-                ctx.reply("Your override can't also be an issue.").await?;
+        Ok(contention_messages) => {
+            if contention_messages.contains(&message.id) {
+                ctx.reply("Your contention can't also be an issue.").await?;
                 return Ok(());
             }
         }
-        Ok(None) => (),
         Err(e) => {
-            ctx.reply(format!("Failed to check for override: {e}"))
-                .await?;
+            ctx.reply(e.to_string()).await?;
             return Ok(());
         }
-    };
-
-    if old_message
-        .and_then(|x| Some(x == message.id))
-        .unwrap_or_default()
-    {
-        ctx.reply("You've already marked this message as your raised issue.")
-            .await?;
-        return Ok(());
     }
 
     if let Err(e) = discussion
@@ -166,63 +155,19 @@ pub async fn cr_issue_raise_context(ctx: Context<'_>, message: Message) -> Resul
         return Ok(());
     }
 
-    let Some(channel) = ctx.guild_channel().await else {
-        error!("Channel for {discussion:?} wasn't a guild channel.");
-        return Ok(());
-    };
-
-    if let Some(old_message) = old_message {
-        match channel.message(&ctx, old_message).await {
-            Ok(x) => {
-                x.unpin(&ctx).await?;
-            }
-            Err(e) => {
-                error!(
-                    "Failed to resolve {}'s old issue message {old_message}: {e:#?}",
-                    ctx.author().id
-                );
-
-                // Might've already been deleted, not going to bug the user about it or abort
-            }
-        }
-    }
-
-    let overrides = match discussion.clear_issue_overrides(&ctx.data().db).await {
-        Ok(x) => x,
-        Err(e) => {
-            ctx.reply(format!("Failed to retrieve overrides: {e}"))
-                .await?;
-            return Ok(());
-        }
-    };
-
-    for (_, message_id) in overrides {
-        match channel.message(&ctx, message_id).await {
-            Ok(x) => {
-                x.unpin(&ctx).await?;
-            }
-            Err(e) => {
-                error!(
-                    "Failed to resolve old override message {message_id} in {discussion:?}: {e:#?}"
-                );
-                // Might've already been deleted, not going to bug the user about it or abort
-            }
-        }
-    }
-
     ctx.reply("Issue raised successfully.").await?;
 
     Ok(())
 }
 
-#[poise::command(context_menu_command = "Vote to override issues", ephemeral)]
+#[poise::command(context_menu_command = "Contest issues", ephemeral)]
 pub async fn cr_issue_override_context(ctx: Context<'_>, message: Message) -> Result<(), Error> {
     if !check_permissions_command(&ctx, PermissionFlags::CONTENT_REVIEWER).await? {
         return Ok(());
     }
 
     if ctx.author().id != message.author.id {
-        ctx.reply("You can't mark someone else's message as your issue override vote.")
+        ctx.reply("You can't contest issues using someone else's message.")
             .await?;
         return Ok(());
     }
@@ -231,66 +176,38 @@ pub async fn cr_issue_override_context(ctx: Context<'_>, message: Message) -> Re
     {
         Some(x) => x,
         None => {
-            ctx.reply("You can't override an issue outside of a review thread.")
+            ctx.reply("You can't contest an issue outside of a review thread.")
                 .await?;
             return Ok(());
         }
     };
 
-    let Some(guild_channel) = ctx.guild_channel().await else {
-        error!("Channel for {discussion:?} wasn't a guild channel.");
-        return Ok(());
-    };
-
     match discussion
-        .get_issue_by_author(&ctx.data().db, message.author.id)
+        .get_issues_by_author(&ctx.data().db, message.author.id)
         .await
     {
-        Ok(Some(issue_message)) => {
-            if message.id == issue_message {
-                ctx.reply("You can't mark your issue as one of its overrides.")
-                    .await?;
+        Ok(issue_messages) => {
+            if issue_messages.contains(&message.id) {
+                ctx.reply("Your issue can't also be a contention.").await?;
                 return Ok(());
             }
         }
-        Ok(None) => (),
         Err(e) => {
             error!(
                 "Failed to get PR#{} issue for {} while trying to check against id of new override: {e}",
                 message.author.id, discussion.pr_id
             );
-        }
-    }
 
-    let old_message = match discussion
-        .get_override_by_author(&ctx.data().db, message.author.id)
-        .await
-    {
-        Ok(x) => x,
-        Err(e) => {
-            ctx.reply(format!("Failed to check for previous override: {e}"))
-                .await?;
+            ctx.reply(e.to_string()).await?;
             return Ok(());
         }
-    };
-
-    if old_message
-        .and_then(|x| Some(x == message.id))
-        .unwrap_or_default()
-    {
-        ctx.reply(
-            "You've already marked this message as your override for <@{issue_author}>'s issue.",
-        )
-        .await?;
-        return Ok(());
     }
 
     if let Err(e) = discussion
-        .upsert_issue_override(&ctx.data().db, message.author.id, message.id)
+        .upsert_issue_override(&ctx.data().db, message.author.id, message.id, None)
         .await
     {
-        ctx.reply(format!("Failed to add issue override: {e}"))
-            .await?;
+        ctx.reply(format!("Failed to add contention: {e}")).await?;
     }
 
     if let Err(e) = message.pin(&ctx).await {
@@ -301,24 +218,7 @@ pub async fn cr_issue_override_context(ctx: Context<'_>, message: Message) -> Re
         return Ok(());
     }
 
-    if let Some(old_message) = old_message {
-        match guild_channel.message(&ctx, old_message).await {
-            Ok(x) => {
-                x.unpin(&ctx).await?;
-            }
-            Err(e) => {
-                error!(
-                    "Failed to resolve {}'s old issue override message {old_message}: {e:#?}",
-                    ctx.author().id
-                );
-
-                ctx.reply("Failed to resolve old issue override message, assuming it was deleted. The new issue override has been successfully recorded and pinned, but no attempt to unpin the old issue will be made.").await?;
-            }
-        }
-    }
-
-    ctx.reply("Override vote added successfully.").await?;
-
+    ctx.reply("Contention recorded successfully.").await?;
     Ok(())
 }
 
@@ -333,22 +233,24 @@ pub async fn cr_issue_view_context(ctx: Context<'_>, message: Message) -> Result
         Some(x) => x,
         None => {
             ctx.reply(
-                "Issues can only be raised in review threads, there are no overrides to view here.",
+                "Issues can only be raised in review threads, there are no contentions to view here.",
             )
             .await?;
             return Ok(());
         }
     };
 
-    let issue_message = match discussion
-        .get_issue_by_author(&ctx.data().db, message.author.id)
+    let issue_messages = match discussion
+        .get_issues_by_author(&ctx.data().db, message.author.id)
         .await
     {
-        Ok(Some(x)) => x,
-        Ok(None) => {
-            ctx.reply(format!("<@{}> has no active issue.", message.author.id))
-                .await?;
-            return Ok(());
+        Ok(x) => {
+            if x.is_empty() {
+                ctx.reply(format!("<@{}> has no active issue.", message.author.id))
+                    .await?;
+                return Ok(());
+            }
+            x
         }
         Err(e) => {
             ctx.reply(format!(
@@ -364,46 +266,28 @@ pub async fn cr_issue_view_context(ctx: Context<'_>, message: Message) -> Result
         return Ok(());
     };
 
-    ctx.send(
-        CreateReply::default()
-            .embed(create_message_embed(&ctx, &guild_channel, issue_message, Some("issue")).await?),
-    )
-    .await?;
+    let mut reply = CreateReply::default();
+
+    for message in issue_messages {
+        reply = reply.embed(
+            create_message_embed(
+                &ctx,
+                &guild_channel,
+                &ctx.data().permissions,
+                message,
+                Some("issue"),
+            )
+            .await?,
+        );
+    }
+
+    ctx.send(reply).await?;
 
     Ok(())
 }
 
-#[poise::command(context_menu_command = "Dismiss own issue", ephemeral)]
-pub async fn cr_issue_dismiss_context(ctx: Context<'_>, _message: Message) -> Result<(), Error> {
-    dismiss_own_impl(ctx, false).await?;
-    Ok(())
-}
-
-#[poise::command(slash_command, rename = "dismiss", ephemeral)]
-/// Dismiss the issue you raised.
-pub async fn cr_issue_dismiss(ctx: Context<'_>) -> Result<(), Error> {
-    dismiss_own_impl(ctx, false).await?;
-    Ok(())
-}
-
-#[poise::command(context_menu_command = "Dismiss own override", ephemeral)]
-pub async fn cr_issue_dismiss_override_context(
-    ctx: Context<'_>,
-    _message: Message,
-) -> Result<(), Error> {
-    dismiss_own_impl(ctx, true).await?;
-    Ok(())
-}
-
-#[poise::command(slash_command, rename = "dismiss-override", ephemeral)]
-/// Dismiss your vote to override.
-pub async fn cr_issue_dismiss_override(ctx: Context<'_>) -> Result<(), Error> {
-    dismiss_own_impl(ctx, true).await?;
-    Ok(())
-}
-
-/// if !is_override, dismiss issue. if is_override, dismiss override
-async fn dismiss_own_impl(ctx: Context<'_>, is_override: bool) -> Result<(), Error> {
+#[poise::command(context_menu_command = "Dismiss issue or contention", ephemeral)]
+pub async fn cr_issue_dismiss_context(ctx: Context<'_>, message: Message) -> Result<(), Error> {
     if !check_permissions_command(&ctx, PermissionFlags::CONTENT_REVIEWER).await? {
         return Ok(());
     }
@@ -415,53 +299,83 @@ async fn dismiss_own_impl(ctx: Context<'_>, is_override: bool) -> Result<(), Err
         return Ok(());
     };
 
-    let message = if is_override {
-        discussion
-            .delete_override_by_author(&ctx.data().db, ctx.author().id)
-            .await?
-    } else {
-        discussion
-            .delete_issue_by_author(&ctx.data().db, ctx.author().id)
-            .await?
+    let author = match discussion
+        .get_issue_author(&ctx.data().db, message.id)
+        .await
+    {
+        Ok(author) => author,
+        Err(e) => {
+            ctx.reply(format!("Failed to retrieve issue author: {e}"))
+                .await?;
+            return Ok(());
+        }
     };
 
-    match message {
+    let mut is_author = false;
+    let mut exists = false;
+    let mut is_issue = false; // if false, override
+    match author {
         Some(x) => {
-            let channel = ctx
-                .guild_channel()
-                .await
-                .ok_or(HandledError::UserfacingError(
-                    "Issue/override dismissed outside of guild.".into(),
-                ))?;
-
-            channel.message(&ctx, x).await?.unpin(&ctx).await?
+            is_author = x == ctx.author().id;
+            exists = true;
+            is_issue = true;
         }
         None => {
-            ctx.reply(format!(
-                "You haven't {} in this discussion.",
-                if is_override {
-                    "voted to override the issues"
-                } else {
-                    "raised an issue"
+            match discussion
+                .get_override_author(&ctx.data().db, message.id)
+                .await
+            {
+                Ok(Some(x)) => {
+                    is_author = x == ctx.author().id;
+                    exists = true;
                 }
-            ))
-            .await?;
 
+                Ok(None) => (),
+
+                Err(e) => {
+                    ctx.reply(format!("Failed to retrieve contention author: {e}"))
+                        .await?;
+                    return Ok(());
+                }
+            };
+        }
+    }
+
+    if !exists {
+        ctx.reply("The selected message has not been is not an issue or contention.")
+            .await?;
+        return Ok(());
+    }
+
+    if !is_author {
+        ctx.reply("You can't dismiss someone else's issue or contention.")
+            .await?;
+        return Ok(());
+    }
+
+    if is_issue {
+        if let Err(e) = discussion.delete_issue(&ctx.data().db, message.id).await {
+            ctx.reply(format!("Failed to dismiss issue: {e}")).await?;
+            return Ok(());
+        }
+    } else {
+        if let Err(e) = discussion.delete_override(&ctx.data().db, message.id).await {
+            ctx.reply(format!("Failed to dismiss contention: {e}"))
+                .await?;
             return Ok(());
         }
     }
 
-    ctx.reply(format!(
-        "{} dismissed successfully.",
-        if is_override { "Override" } else { "Issue" }
-    ))
-    .await?;
+    message.unpin(&ctx).await?;
+
+    ctx.reply(format!("Dismissed successfully.")).await?;
     Ok(())
 }
 
 pub async fn create_message_embed(
-    ctx: impl CacheHttp + AsRef<Cache>,
+    ctx: impl CacheHttp + AsRef<Http> + AsRef<Cache>,
     channel: &GuildChannel,
+    permissions: &Permissions,
     message_id: MessageId,
     message_label_override: Option<impl Into<String>>,
 ) -> Result<CreateEmbed, Error> {
@@ -483,6 +397,30 @@ pub async fn create_message_embed(
         }
     };
 
+    let positive_reactions = match message
+        .reaction_users(&ctx, POSITIVE_REACTION.clone(), Some(100), None)
+        .await
+    {
+        Ok(users) => {
+            let mut count = 0;
+            for user in users {
+                if permissions
+                    .has_flags(user.id.get(), PermissionFlags::CONTENT_REVIEWER)
+                    .await
+                {
+                    count += 1;
+                }
+            }
+            Some(count)
+        }
+        Err(e) => {
+            error!(
+                "Failed to count positive CR reactions for message {message_id} in {channel}: {e:#?}"
+            );
+            None
+        }
+    };
+
     let author_name = &message.author.name;
     let message_content_truncated = message
         .content_safe(&ctx)
@@ -490,17 +428,31 @@ pub async fn create_message_embed(
         .take(EMBED_MAX_LENGTH)
         .collect::<String>();
 
-    Ok(CreateEmbed::new()
+    let embed = CreateEmbed::new()
         .title(format!("{author_name}'s {message_label}",))
         .url(message_id.link(channel.id, Some(channel.guild_id)))
         .description(message_content_truncated)
-        .field("Author", message.author.mention().to_string(), true))
+        .field("Author", message.author.mention().to_string(), true)
+        .field(
+            POSITIVE_REACTION.to_string(),
+            positive_reactions
+                .and_then(|x| Some(x.to_string()))
+                .unwrap_or("ERROR".into()),
+            true,
+        );
+
+    Ok(embed)
 }
 
+// TODO: Make this configurable instead of hardcoding
+const POSITIVE_REACTION: LazyCell<ReactionType> =
+    LazyCell::new(|| ReactionType::Unicode("👍".into()));
+
 pub async fn create_issue_overview_embeds(
-    ctx: impl CacheHttp + AsRef<Cache>,
+    ctx: impl CacheHttp + AsRef<Http> + AsRef<Cache>,
     db: &Pool<Sqlite>,
     discussion: &DiscussionRecord,
+    permissions: &Permissions,
 ) -> Result<Vec<CreateEmbed>, HandledError> {
     let discussion_channel = discussion
         .thread_id
@@ -514,30 +466,43 @@ pub async fn create_issue_overview_embeds(
         .guild()
         .ok_or(HandledError::InternalError)?;
 
-    let issues = discussion.get_raised_issues(&db).await?;
-    let overrides = discussion.get_issue_overrides(&db).await?;
+    let issues = discussion.get_issues(&db).await?;
+    let overrides = discussion.get_overrides(&db).await?;
 
     let mut embeds = vec![];
 
     for (user, message) in issues {
-        let embed =
-            match create_message_embed(&ctx, &discussion_channel, message, Some("issue")).await {
-                Ok(x) => x,
-                Err(e) => {
-                    error!(
-                        "Failed to create issue embed for {user}'s message {message} in {}: {e}",
-                        discussion_channel.id
-                    );
-                    continue;
-                }
-            };
+        let embed = match create_message_embed(
+            &ctx,
+            &discussion_channel,
+            &permissions,
+            message,
+            Some("issue"),
+        )
+        .await
+        {
+            Ok(x) => x,
+            Err(e) => {
+                error!(
+                    "Failed to create issue embed for {user}'s message {message} in {}: {e}",
+                    discussion_channel.id
+                );
+                continue;
+            }
+        };
 
         embeds.push(embed);
     }
 
     for (user, message) in overrides {
-        let embed = match create_message_embed(&ctx, &discussion_channel, message, Some("override"))
-            .await
+        let embed = match create_message_embed(
+            &ctx,
+            &discussion_channel,
+            &permissions,
+            message,
+            Some("contention"),
+        )
+        .await
         {
             Ok(x) => x,
             Err(e) => {

@@ -16,9 +16,8 @@ use crate::{
             data::config::CrConfig,
             github_events::cr_github_task,
             raised_issues::{
-                cr_issue_dismiss_context, cr_issue_dismiss_override_context,
-                cr_issue_override_context, cr_issue_overview_context, cr_issue_raise_context,
-                cr_issue_view_context,
+                cr_issue_dismiss_context, cr_issue_override_context, cr_issue_overview_context,
+                cr_issue_raise_context, cr_issue_view_context,
             },
             timers::cr_timers_task,
         },
@@ -94,7 +93,6 @@ pub async fn initialize(
                 cr_issue_view_context(),
                 cr_issue_override_context(),
                 cr_issue_dismiss_context(),
-                cr_issue_dismiss_override_context(),
                 cr_issue_overview_context(),
             ],
             event_handler: |ctx, event, framework, data| {
