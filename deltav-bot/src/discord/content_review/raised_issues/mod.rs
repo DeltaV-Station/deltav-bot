@@ -266,10 +266,7 @@ pub async fn cr_issue_view_context(ctx: Context<'_>, message: Message) -> Result
     Ok(())
 }
 
-#[poise::command(
-    context_menu_command = "Dismiss selected issue or contention",
-    ephemeral
-)]
+#[poise::command(context_menu_command = "Dismiss issue or contention", ephemeral)]
 pub async fn cr_issue_dismiss_context(ctx: Context<'_>, message: Message) -> Result<(), Error> {
     if !check_permissions_command(&ctx, PermissionFlags::CONTENT_REVIEWER).await? {
         return Ok(());
